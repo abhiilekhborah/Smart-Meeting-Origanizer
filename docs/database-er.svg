@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1340" height="820" viewBox="0 0 1340 820">
+<rect width="1340" height="820" fill="#f6f8fc"/>
+<style>text{font-family:Arial,sans-serif;fill:#182442}.title{font-size:25px;font-weight:bold}.small{font-size:12px}.column{font-size:12px}.table{font-size:17px;font-weight:bold;fill:white}.edge{fill:none;stroke:#576b90;stroke-width:2}</style>
+<text x="30" y="40" class="title">Standard ER Diagram</text>
+<text x="30" y="69" class="small">Smart Meet · PostgreSQL · PK primary key · FK foreign key · AK alternate key · UK unique index · ? nullable</text>
+<rect x="30" y="110" width="310" height="300" rx="5" fill="white" stroke="#aab6cc"/>
+<path d="M35 110 H335 Q340 110 340 115 V150 H30 V115 Q30 110 35 110" fill="#172345"/>
+<text x="44" y="136" class="table">Meetings</text>
+<line x1="30" y1="150" x2="340" y2="150" stroke="#edf0f6"/>
+<text x="39" y="171" class="column">PK</text>
+<text x="85" y="171" class="column">MeetingId</text>
+<text x="218" y="171" class="column">integer</text>
+<line x1="30" y1="182" x2="340" y2="182" stroke="#edf0f6"/>
+<text x="39" y="203" class="column"></text>
+<text x="85" y="203" class="column">Title</text>
+<text x="218" y="203" class="column">varchar(200)</text>
+<line x1="30" y1="214" x2="340" y2="214" stroke="#edf0f6"/>
+<text x="39" y="235" class="column"></text>
+<text x="85" y="235" class="column">Description</text>
+<text x="218" y="235" class="column">text ?</text>
+<line x1="30" y1="246" x2="340" y2="246" stroke="#edf0f6"/>
+<text x="39" y="267" class="column">UK</text>
+<text x="85" y="267" class="column">MeetingCode</text>
+<text x="218" y="267" class="column">varchar(20)</text>
+<line x1="30" y1="278" x2="340" y2="278" stroke="#edf0f6"/>
+<text x="39" y="299" class="column"></text>
+<text x="85" y="299" class="column">CreatedAt</text>
+<text x="218" y="299" class="column">timestamptz</text>
+<line x1="30" y1="310" x2="340" y2="310" stroke="#edf0f6"/>
+<text x="39" y="331" class="column"></text>
+<text x="85" y="331" class="column">StartedAt</text>
+<text x="218" y="331" class="column">timestamptz</text>
+<line x1="30" y1="342" x2="340" y2="342" stroke="#edf0f6"/>
+<text x="39" y="363" class="column"></text>
+<text x="85" y="363" class="column">EndedAt</text>
+<text x="218" y="363" class="column">timestamptz ?</text>
+<line x1="30" y1="374" x2="340" y2="374" stroke="#edf0f6"/>
+<text x="39" y="395" class="column"></text>
+<text x="85" y="395" class="column">Status</text>
+<text x="218" y="395" class="column">varchar(20)</text>
+<rect x="420" y="110" width="380" height="364" rx="5" fill="white" stroke="#aab6cc"/>
+<path d="M425 110 H795 Q800 110 800 115 V150 H420 V115 Q420 110 425 110" fill="#172345"/>
+<text x="434" y="136" class="table">Users</text>
+<line x1="420" y1="150" x2="800" y2="150" stroke="#edf0f6"/>
+<text x="429" y="171" class="column">PK,AK</text>
+<text x="475" y="171" class="column">UserId</text>
+<text x="678" y="171" class="column">integer</text>
+<line x1="420" y1="182" x2="800" y2="182" stroke="#edf0f6"/>
+<text x="429" y="203" class="column">FK,AK</text>
+<text x="475" y="203" class="column">MeetingId</text>
+<text x="678" y="203" class="column">integer</text>
+<line x1="420" y1="214" x2="800" y2="214" stroke="#edf0f6"/>
+<text x="429" y="235" class="column"></text>
+<text x="475" y="235" class="column">Name</text>
+<text x="678" y="235" class="column">varchar(100)</text>
+<line x1="420" y1="246" x2="800" y2="246" stroke="#edf0f6"/>
+<text x="429" y="267" class="column"></text>
+<text x="475" y="267" class="column">Email</text>
+<text x="678" y="267" class="column">varchar(150) ?</text>
+<line x1="420" y1="278" x2="800" y2="278" stroke="#edf0f6"/>
+<text x="429" y="299" class="column"></text>
+<text x="475" y="299" class="column">Organization</text>
+<text x="678" y="299" class="column">varchar(150)</text>
+<line x1="420" y1="310" x2="800" y2="310" stroke="#edf0f6"/>
+<text x="429" y="331" class="column"></text>
+<text x="475" y="331" class="column">Role</text>
+<text x="678" y="331" class="column">varchar(20)</text>
+<line x1="420" y1="342" x2="800" y2="342" stroke="#edf0f6"/>
+<text x="429" y="363" class="column"></text>
+<text x="475" y="363" class="column">JoinedAt</text>
+<text x="678" y="363" class="column">timestamptz</text>
+<line x1="420" y1="374" x2="800" y2="374" stroke="#edf0f6"/>
+<text x="429" y="395" class="column"></text>
+<text x="475" y="395" class="column">LastSeenAt</text>
+<text x="678" y="395" class="column">timestamptz ?</text>
+<line x1="420" y1="406" x2="800" y2="406" stroke="#edf0f6"/>
+<text x="429" y="427" class="column"></text>
+<text x="475" y="427" class="column">IsActive</text>
+<text x="678" y="427" class="column">boolean</text>
+<line x1="420" y1="438" x2="800" y2="438" stroke="#edf0f6"/>
+<text x="429" y="459" class="column">UK</text>
+<text x="475" y="459" class="column">SessionTokenHash</text>
+<text x="678" y="459" class="column">varchar(64) ?</text>
+<rect x="900" y="110" width="400" height="460" rx="5" fill="white" stroke="#aab6cc"/>
+<path d="M905 110 H1295 Q1300 110 1300 115 V150 H900 V115 Q900 110 905 110" fill="#172345"/>
+<text x="914" y="136" class="table">Questions</text>
+<line x1="900" y1="150" x2="1300" y2="150" stroke="#edf0f6"/>
+<text x="909" y="171" class="column">PK</text>
+<text x="955" y="171" class="column">QuestionId</text>
+<text x="1178" y="171" class="column">integer</text>
+<line x1="900" y1="182" x2="1300" y2="182" stroke="#edf0f6"/>
+<text x="909" y="203" class="column">FK</text>
+<text x="955" y="203" class="column">MeetingId</text>
+<text x="1178" y="203" class="column">integer</text>
+<line x1="900" y1="214" x2="1300" y2="214" stroke="#edf0f6"/>
+<text x="909" y="235" class="column">FK</text>
+<text x="955" y="235" class="column">UserId</text>
+<text x="1178" y="235" class="column">integer</text>
+<line x1="900" y1="246" x2="1300" y2="246" stroke="#edf0f6"/>
+<text x="909" y="267" class="column"></text>
+<text x="955" y="267" class="column">QuestionText</text>
+<text x="1178" y="267" class="column">text</text>
+<line x1="900" y1="278" x2="1300" y2="278" stroke="#edf0f6"/>
+<text x="909" y="299" class="column"></text>
+<text x="955" y="299" class="column">Category</text>
+<text x="1178" y="299" class="column">varchar(50) ?</text>
+<line x1="900" y1="310" x2="1300" y2="310" stroke="#edf0f6"/>
+<text x="909" y="331" class="column"></text>
+<text x="955" y="331" class="column">Status</text>
+<text x="1178" y="331" class="column">varchar(20)</text>
+<line x1="900" y1="342" x2="1300" y2="342" stroke="#edf0f6"/>
+<text x="909" y="363" class="column"></text>
+<text x="955" y="363" class="column">SubmittedAt</text>
+<text x="1178" y="363" class="column">timestamptz</text>
+<line x1="900" y1="374" x2="1300" y2="374" stroke="#edf0f6"/>
+<text x="909" y="395" class="column"></text>
+<text x="955" y="395" class="column">SpeakingStartedAt</text>
+<text x="1178" y="395" class="column">timestamptz ?</text>
+<line x1="900" y1="406" x2="1300" y2="406" stroke="#edf0f6"/>
+<text x="909" y="427" class="column"></text>
+<text x="955" y="427" class="column">AnsweredAt</text>
+<text x="1178" y="427" class="column">timestamptz ?</text>
+<line x1="900" y1="438" x2="1300" y2="438" stroke="#edf0f6"/>
+<text x="909" y="459" class="column"></text>
+<text x="955" y="459" class="column">WithdrawnAt</text>
+<text x="1178" y="459" class="column">timestamptz ?</text>
+<line x1="900" y1="470" x2="1300" y2="470" stroke="#edf0f6"/>
+<text x="909" y="491" class="column"></text>
+<text x="955" y="491" class="column">SpeakingDurationSeconds</text>
+<text x="1178" y="491" class="column">integer ?</text>
+<line x1="900" y1="502" x2="1300" y2="502" stroke="#edf0f6"/>
+<text x="909" y="523" class="column"></text>
+<text x="955" y="523" class="column">OrganizerNote</text>
+<text x="1178" y="523" class="column">text ?</text>
+<line x1="900" y1="534" x2="1300" y2="534" stroke="#edf0f6"/>
+<text x="909" y="555" class="column"></text>
+<text x="955" y="555" class="column">WithdrawalTokenHash</text>
+<text x="1178" y="555" class="column">varchar(64) ?</text>
+<path class="edge" d="M340 167 H378 V199 H420"/>
+<text x="350" y="158" class="small">1</text><text x="399" y="189" class="small">N</text>
+<path class="edge" d="M800 167 H840 V231 H900"/>
+<text x="810" y="158" class="small">1</text><text x="876" y="222" class="small">N</text>
+<path class="edge" d="M30 167 H14 V660 H1320 V199 H1300"/>
+<text x="30" y="650" class="small">1 meeting → N questions</text>
+<text x="520" y="650" class="small">User ownership uses composite (UserId, MeetingId) FK</text>
+<text x="30" y="710" class="small">Organizer = the meeting’s single Users row where Role = Organizer (partial unique index).</text>
+<text x="30" y="738" class="small">One Speaking question per meeting. FIFO order: SubmittedAt, QuestionId. Restrictive foreign-key deletion.</text>
+<text x="30" y="766" class="small">SessionTokenHash is internal. WithdrawalTokenHash supports legacy questions. Migration history table omitted.</text>
+<path class="edge" d="M408 191 L420 199 L408 207 M408 199 H420 M888 223 L900 231 L888 239 M888 231 H900"/>
+</svg>

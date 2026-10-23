@@ -22,32 +22,6 @@ namespace SmartMeet.API.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("SmartMeet.API.Models.Announcement", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("MeetingId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Message")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MeetingId", "CreatedAt", "Id");
-
-                    b.ToTable("Announcements");
-                });
-
             modelBuilder.Entity("SmartMeet.API.Models.Meeting", b =>
                 {
                     b.Property<int>("MeetingId")
@@ -59,7 +33,18 @@ namespace SmartMeet.API.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MeetingCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Status")
@@ -73,6 +58,9 @@ namespace SmartMeet.API.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.HasKey("MeetingId");
+
+                    b.HasIndex("MeetingCode")
+                        .IsUnique();
 
                     b.ToTable("Meetings", t =>
                         {
@@ -91,22 +79,22 @@ namespace SmartMeet.API.Migrations
                     b.Property<DateTime?>("AnsweredAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Category")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<int>("MeetingId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Organization")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
+                    b.Property<string>("OrganizerNote")
+                        .HasColumnType("text");
 
                     b.Property<string>("QuestionText")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("SpeakingDurationSeconds")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("SpeakingStartedAt")
                         .HasColumnType("timestamp with time zone");
@@ -118,6 +106,9 @@ namespace SmartMeet.API.Migrations
 
                     b.Property<DateTime>("SubmittedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("WithdrawalTokenHash")
                         .HasMaxLength(64)
@@ -133,50 +124,80 @@ namespace SmartMeet.API.Migrations
                         .HasDatabaseName("IX_OneSpeakerPerMeeting")
                         .HasFilter("\"Status\" = 'Speaking'");
 
+                    b.HasIndex("UserId", "MeetingId");
+
                     b.HasIndex("MeetingId", "Status", "SubmittedAt", "QuestionId");
 
                     b.ToTable("Questions", t =>
                         {
+                            t.HasCheckConstraint("CK_Question_Category", "\"Category\" IS NULL OR \"Category\" IN ('General', 'Technical', 'Feedback', 'Other')");
+
+                            t.HasCheckConstraint("CK_Question_Duration", "\"SpeakingDurationSeconds\" IS NULL OR \"SpeakingDurationSeconds\" >= 0");
+
                             t.HasCheckConstraint("CK_Question_Status", "\"Status\" IN ('Pending', 'Speaking', 'Answered', 'Withdrawn')");
                         });
                 });
 
-            modelBuilder.Entity("SmartMeet.API.Models.QuestionVote", b =>
+            modelBuilder.Entity("SmartMeet.API.Models.User", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<int>("UserId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("UserId"));
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<string>("Email")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("JoinedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("QuestionId")
+                    b.Property<DateTime?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MeetingId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("VisitorTokenHash")
+                    b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Organization")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SessionTokenHash")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
-                    b.HasKey("Id");
+                    b.HasKey("UserId");
 
-                    b.HasIndex("QuestionId", "VisitorTokenHash")
-                        .IsUnique();
+                    b.HasIndex("MeetingId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneOrganizerPerMeeting")
+                        .HasFilter("\"Role\" = 'Organizer'");
 
-                    b.ToTable("QuestionVotes");
-                });
+                    b.HasIndex("SessionTokenHash")
+                        .IsUnique()
+                        .HasFilter("\"SessionTokenHash\" IS NOT NULL");
 
-            modelBuilder.Entity("SmartMeet.API.Models.Announcement", b =>
-                {
-                    b.HasOne("SmartMeet.API.Models.Meeting", "Meeting")
-                        .WithMany("Announcements")
-                        .HasForeignKey("MeetingId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                    b.HasIndex("MeetingId", "Role", "LastSeenAt");
 
-                    b.Navigation("Meeting");
+                    b.ToTable("Users", t =>
+                        {
+                            t.HasCheckConstraint("CK_User_Role", "\"Role\" IN ('Organizer', 'Visitor')");
+                        });
                 });
 
             modelBuilder.Entity("SmartMeet.API.Models.Question", b =>
@@ -187,30 +208,39 @@ namespace SmartMeet.API.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("Meeting");
-                });
-
-            modelBuilder.Entity("SmartMeet.API.Models.QuestionVote", b =>
-                {
-                    b.HasOne("SmartMeet.API.Models.Question", "Question")
-                        .WithMany("Votes")
-                        .HasForeignKey("QuestionId")
+                    b.HasOne("SmartMeet.API.Models.User", "User")
+                        .WithMany("Questions")
+                        .HasForeignKey("UserId", "MeetingId")
+                        .HasPrincipalKey("UserId", "MeetingId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("Question");
+                    b.Navigation("Meeting");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SmartMeet.API.Models.User", b =>
+                {
+                    b.HasOne("SmartMeet.API.Models.Meeting", "Meeting")
+                        .WithMany("Users")
+                        .HasForeignKey("MeetingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Meeting");
                 });
 
             modelBuilder.Entity("SmartMeet.API.Models.Meeting", b =>
                 {
-                    b.Navigation("Announcements");
-
                     b.Navigation("Questions");
+
+                    b.Navigation("Users");
                 });
 
-            modelBuilder.Entity("SmartMeet.API.Models.Question", b =>
+            modelBuilder.Entity("SmartMeet.API.Models.User", b =>
                 {
-                    b.Navigation("Votes");
+                    b.Navigation("Questions");
                 });
 #pragma warning restore 612, 618
         }

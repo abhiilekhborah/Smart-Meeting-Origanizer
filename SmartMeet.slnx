@@ -1,4 +1,3 @@
 <Solution>
   <Project Path="SmartMeet.API/SmartMeet.API.csproj" />
-  <Project Path="SmartMeet.Tests/SmartMeet.Tests.csproj" />
 </Solution>

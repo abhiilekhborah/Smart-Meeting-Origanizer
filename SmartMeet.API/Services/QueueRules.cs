@@ -26,5 +26,6 @@ public static class QueueRules
         if (question.Status != "Speaking") throw new ApiException(409, "Only the speaking question can be answered.");
         question.Status = "Answered";
         question.AnsweredAt = now;
+        question.SpeakingDurationSeconds = question.SpeakingStartedAt is DateTime start ? (int)Math.Min(int.MaxValue, Math.Max(0, (now - start).TotalSeconds)) : null;
     }
 }

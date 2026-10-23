@@ -8,38 +8,55 @@ public interface IMeetingService
 {
     Task<List<MeetingResponseDto>> List();
     Task<MeetingResponseDto> Get(int id);
-    Task<MeetingResponseDto> Create(CreateMeetingDto dto);
+    Task<CreatedMeetingResponseDto> Create(CreateMeetingDto dto);
     Task<MeetingResponseDto> End(int id);
     Task<MeetingSummaryDto> Summary(int id);
-    Task<List<AnnouncementResponseDto>> Announcements(int id);
-    Task<AnnouncementResponseDto> Publish(int id, CreateAnnouncementDto dto);
 }
-public class MeetingService(SmartMeetDbContext db) : IMeetingService
+public class MeetingService(SmartMeetDbContext db, SessionService sessions) : IMeetingService
 {
-    public static MeetingResponseDto Map(Meeting m) => new(m.MeetingId, m.Title, m.CreatedAt, m.Status, m.EndedAt);
-    public async Task<List<MeetingResponseDto>> List() => (await db.Meetings.AsNoTracking().OrderByDescending(m => m.CreatedAt).ToListAsync()).Select(Map).ToList();
-    public async Task<MeetingResponseDto> Get(int id) => Map(await db.Meetings.AsNoTracking().SingleOrDefaultAsync(m => m.MeetingId == id) ?? throw new ApiException(404, "Meeting not found."));
-    public async Task<MeetingResponseDto> Create(CreateMeetingDto dto)
+    private static MeetingResponseDto Map(Meeting m)
     {
-        var meeting = new Meeting { Title = dto.Title.Trim() };
-        db.Meetings.Add(meeting);
-        await db.SaveChangesAsync();
-        return Map(meeting);
+        var organizer = m.Users.SingleOrDefault(u => u.Role == "Organizer");
+        var visitors = m.Users.Where(u => u.Role == "Visitor" && u.SessionTokenHash != null).ToList();
+        return new(m.MeetingId, m.Title, m.Description, m.MeetingCode, organizer?.UserId, organizer?.Name,
+            m.CreatedAt, m.StartedAt, m.Status, m.EndedAt, visitors.Count,
+            m.Status == "Active" ? visitors.Count(u => SessionService.RecentlyActive(u, DateTime.UtcNow)) : 0);
+    }
+    public async Task<List<MeetingResponseDto>> List() => (await db.Meetings.AsNoTracking().Include(m => m.Users)
+        .OrderByDescending(m => m.CreatedAt).ToListAsync()).Select(Map).ToList();
+    public async Task<MeetingResponseDto> Get(int id) => Map(await db.Meetings.AsNoTracking().Include(m => m.Users)
+        .SingleOrDefaultAsync(m => m.MeetingId == id) ?? throw new ApiException(404, "Meeting not found."));
+    public async Task<CreatedMeetingResponseDto> Create(CreateMeetingDto dto)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync();
+        // 64 random bits plus a unique database index; retry a code collision before insertion.
+        string code;
+        do { code = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(8)); }
+        while (await db.Meetings.AnyAsync(m => m.MeetingCode == code));
+        var now = DateTime.UtcNow;
+        var meeting = new Meeting { Title = dto.Title.Trim(), Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim(),
+            MeetingCode = code, CreatedAt = now, StartedAt = now };
+        var token = TokenSecrets.Create();
+        var organizer = new User { Meeting = meeting, Name = dto.OrganizerName.Trim(), Organization = dto.Organization.Trim(),
+            Role = "Organizer", SessionTokenHash = TokenSecrets.Hash(token), LastSeenAt = now, IsActive = true };
+        db.Users.Add(organizer);
+        await db.SaveChangesAsync(); await tx.CommitAsync();
+        return new(await Get(meeting.MeetingId), new(SessionService.Map(organizer), token));
     }
     public async Task<MeetingResponseDto> End(int id)
     {
+        await sessions.Require(id, "Organizer");
         await using var tx = await db.Database.BeginTransactionAsync();
         var meeting = await MeetingLock.Get(db, id);
         if (meeting.Status == "Active")
         {
             var speaking = await db.Questions.SingleOrDefaultAsync(q => q.MeetingId == id && q.Status == "Speaking");
             if (speaking != null) { speaking.Status = "Pending"; speaking.SpeakingStartedAt = null; }
-            meeting.Status = "Ended";
-            meeting.EndedAt = DateTime.UtcNow;
+            meeting.Status = "Ended"; meeting.EndedAt = DateTime.UtcNow;
+            await db.Users.Where(u => u.MeetingId == id).ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, false));
             await db.SaveChangesAsync();
         }
-        await tx.CommitAsync();
-        return Map(meeting);
+        await tx.CommitAsync(); return await Get(id);
     }
     public async Task<MeetingSummaryDto> Summary(int id)
     {
@@ -47,31 +64,12 @@ public class MeetingService(SmartMeetDbContext db) : IMeetingService
             ?? throw new ApiException(404, "Meeting not found.");
         if (meeting.Status != "Ended") throw new ApiException(409, "The summary is available after the meeting ends.");
         var questions = await db.Questions.AsNoTracking().Where(q => q.MeetingId == id).ToListAsync();
-        var votes = await db.QuestionVotes.CountAsync(v => v.Question.MeetingId == id);
-        return SummaryCalculator.Calculate(meeting, questions, votes);
-    }
-    public async Task<List<AnnouncementResponseDto>> Announcements(int id)
-    {
-        await Get(id);
-        return await db.Announcements.AsNoTracking().Where(a => a.MeetingId == id)
-            .OrderByDescending(a => a.CreatedAt).ThenByDescending(a => a.Id)
-            .Select(a => new AnnouncementResponseDto(a.Id, a.MeetingId, a.Message, a.CreatedAt)).ToListAsync();
-    }
-    public async Task<AnnouncementResponseDto> Publish(int id, CreateAnnouncementDto dto)
-    {
-        await using var tx = await db.Database.BeginTransactionAsync();
-        QueueRules.RequireActive(await MeetingLock.Get(db, id));
-        var announcement = new Announcement { MeetingId = id, Message = dto.Message.Trim() };
-        db.Announcements.Add(announcement);
-        await db.SaveChangesAsync(); await tx.CommitAsync();
-        return new(announcement.Id, announcement.MeetingId, announcement.Message, announcement.CreatedAt);
+        var participants = await db.Users.CountAsync(u => u.MeetingId == id && u.Role == "Visitor" && u.SessionTokenHash != null);
+        return SummaryCalculator.Calculate(meeting, questions, participants);
     }
 }
-
 internal static class MeetingLock
 {
-    // All mutations acquire the same meeting row lock within a transaction.
-    // This serializes next/answer/submit/end across API instances, not just threads.
     public static async Task<Meeting> Get(SmartMeetDbContext db, int id) =>
         await db.Meetings.FromSqlInterpolated($"SELECT * FROM \"Meetings\" WHERE \"MeetingId\" = {id} FOR UPDATE")
             .SingleOrDefaultAsync() ?? throw new ApiException(404, "Meeting not found.");

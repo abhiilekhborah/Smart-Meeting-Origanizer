@@ -9,7 +9,7 @@ import { Meeting } from '../models/meeting.model';
       <span class="status" [class.ended]="meeting()?.status === 'Ended'"><i></i>{{ meeting()?.status || 'No meeting selected' }}</span>
       @if (meeting(); as m) {
         <nav class="role-switch" aria-label="Dashboard view"><a [routerLink]="['/meeting',m.meetingId,'organizer']" [class.selected]="role() === 'organizer'">Organizer</a><a [routerLink]="['/meeting',m.meetingId,'visitor']" [class.selected]="role() === 'visitor'">Visitor</a></nav>
-        @if (role() === 'organizer') {
+        @if (role() === 'organizer' && manage()) {
           <button class="button primary" (click)="newMeeting.emit()"><span>＋</span> New Meeting</button>
           <button class="button dark" (click)="copy.emit()">↗ <span>Copy invite link</span></button>
           @if (m.status === 'Ended') { <button class="button dark" (click)="summary.emit()">View summary</button> }
@@ -19,7 +19,7 @@ import { Meeting } from '../models/meeting.model';
     </div>
   </header>` })
 export class NavbarComponent {
-  meeting = input<Meeting | null>(null); role = input('organizer'); busy = input(false);
+  manage = input(false); meeting = input<Meeting | null>(null); role = input('organizer'); busy = input(false);
   newMeeting = output<void>(); copy = output<void>(); end = output<void>();
   summary = output<void>();
 }

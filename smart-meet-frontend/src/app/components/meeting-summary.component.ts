@@ -8,7 +8,7 @@ import { MeetingSummary } from '../models/meeting.model';
     <div><strong>{{ summary().answeredQuestions }}</strong><span>Answered</span></div>
     <div><strong>{{ summary().pendingQuestions }}</strong><span>Pending / unanswered</span></div>
     <div><strong>{{ summary().withdrawnQuestions }}</strong><span>Withdrawn</span></div>
-    <div><strong>{{ summary().totalUpvotes }}</strong><span>Total upvotes</span></div>
+    <div><strong>{{ summary().totalParticipants }}</strong><span>Joined visitors</span></div>
   </div><p class="feature-muted">Speaking questions return to Pending when a meeting ends. Only explicit answers count as Answered.</p>
 `})
 export class MeetingSummaryComponent{

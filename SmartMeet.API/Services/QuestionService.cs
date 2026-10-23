@@ -8,17 +8,20 @@ namespace SmartMeet.API.Services;
 public interface IQuestionService
 {
     Task<List<QuestionResponseDto>> List(int meetingId, string? status = null);
-    Task<CreatedQuestionResponseDto> Create(CreateQuestionDto dto);
+    Task<QuestionResponseDto> Create(CreateQuestionDto dto);
     Task<QuestionResponseDto> Next(int meetingId);
     Task<QuestionResponseDto> Answer(int id);
-    Task<QuestionResponseDto> Upvote(int id, UpvoteDto dto);
     Task<QuestionResponseDto> Withdraw(int id, WithdrawQuestionDto dto);
+    Task<QuestionResponseDto> Note(int id, OrganizerNoteDto dto);
 }
-public class QuestionService(SmartMeetDbContext db, IMeetingService meetings) : IQuestionService
+public class QuestionService(SmartMeetDbContext db, IMeetingService meetings, SessionService sessions) : IQuestionService
 {
-    private static readonly Expression<Func<Question, QuestionResponseDto>> Response = q => new(q.QuestionId, q.MeetingId, q.Name, q.Organization,
-        q.QuestionText, q.Status, q.SubmittedAt, q.SpeakingStartedAt, q.AnsweredAt, q.WithdrawnAt, q.Votes.Count);
+    private static readonly Expression<Func<Question, QuestionResponseDto>> Response = q => new(q.QuestionId, q.MeetingId, q.UserId,
+        q.User.Name, q.User.Organization, q.QuestionText, q.Category, q.Status, q.SubmittedAt, q.SpeakingStartedAt,
+        q.AnsweredAt, q.WithdrawnAt, q.SpeakingDurationSeconds, q.OrganizerNote);
     private Task<QuestionResponseDto> GetResponse(int id) => db.Questions.AsNoTracking().Where(q => q.QuestionId == id).Select(Response).SingleAsync();
+    private async Task<int> FindMeeting(int id) => await db.Questions.Where(q => q.QuestionId == id).Select(q => (int?)q.MeetingId)
+        .SingleOrDefaultAsync() ?? throw new ApiException(404, "Question not found.");
     public async Task<List<QuestionResponseDto>> List(int meetingId, string? status = null)
     {
         await meetings.Get(meetingId);
@@ -28,19 +31,19 @@ public class QuestionService(SmartMeetDbContext db, IMeetingService meetings) : 
             : query.OrderBy(q => q.SubmittedAt).ThenBy(q => q.QuestionId);
         return await ordered.Select(Response).ToListAsync();
     }
-    public async Task<CreatedQuestionResponseDto> Create(CreateQuestionDto dto)
+    public async Task<QuestionResponseDto> Create(CreateQuestionDto dto)
     {
+        var user = await sessions.Require(dto.MeetingId, "Visitor");
         await using var tx = await db.Database.BeginTransactionAsync();
         QueueRules.RequireActive(await MeetingLock.Get(db, dto.MeetingId));
-        var token = TokenSecrets.Create();
-        var question = new Question { MeetingId = dto.MeetingId, Name = dto.Name.Trim(), Organization = dto.Organization.Trim(), QuestionText = dto.QuestionText.Trim(), WithdrawalTokenHash = TokenSecrets.Hash(token) };
-        db.Questions.Add(question);
-        await db.SaveChangesAsync();
-        await tx.CommitAsync();
-        return new(await GetResponse(question.QuestionId), token);
+        var question = new Question { MeetingId = dto.MeetingId, UserId = user.UserId, QuestionText = dto.QuestionText.Trim(), Category = dto.Category ?? "General" };
+        user.LastSeenAt = DateTime.UtcNow; user.IsActive = true;
+        db.Questions.Add(question); await db.SaveChangesAsync(); await tx.CommitAsync();
+        return await GetResponse(question.QuestionId);
     }
     public async Task<QuestionResponseDto> Next(int meetingId)
     {
+        await sessions.Require(meetingId, "Organizer");
         await using var tx = await db.Database.BeginTransactionAsync();
         QueueRules.RequireActive(await MeetingLock.Get(db, meetingId));
         var hasSpeaker = await db.Questions.AnyAsync(q => q.MeetingId == meetingId && q.Status == "Speaking");
@@ -48,49 +51,40 @@ public class QuestionService(SmartMeetDbContext db, IMeetingService meetings) : 
         var question = await QueueRules.PendingInOrder(db.Questions.Where(q => q.MeetingId == meetingId)).FirstOrDefaultAsync()
             ?? throw new ApiException(409, "There are no pending questions.");
         QueueRules.Start(question, hasSpeaker, DateTime.UtcNow);
-        await db.SaveChangesAsync();
-        await tx.CommitAsync();
-        return await GetResponse(question.QuestionId);
+        await db.SaveChangesAsync(); await tx.CommitAsync(); return await GetResponse(question.QuestionId);
     }
     public async Task<QuestionResponseDto> Answer(int id)
     {
-        var meetingId = await db.Questions.Where(q => q.QuestionId == id).Select(q => (int?)q.MeetingId).SingleOrDefaultAsync()
-            ?? throw new ApiException(404, "Question not found.");
+        var meetingId = await FindMeeting(id); await sessions.Require(meetingId, "Organizer");
         await using var tx = await db.Database.BeginTransactionAsync();
         QueueRules.RequireActive(await MeetingLock.Get(db, meetingId));
         var question = await db.Questions.SingleAsync(q => q.QuestionId == id);
         QueueRules.Answer(question, DateTime.UtcNow);
-        await db.SaveChangesAsync();
-        await tx.CommitAsync();
-        return await GetResponse(question.QuestionId);
-    }
-    private async Task<int> FindMeeting(int id) => await db.Questions.Where(q => q.QuestionId == id)
-        .Select(q => (int?)q.MeetingId).SingleOrDefaultAsync() ?? throw new ApiException(404, "Question not found.");
-    public async Task<QuestionResponseDto> Upvote(int id, UpvoteDto dto)
-    {
-        var hash = TokenSecrets.Hash(dto.VisitorToken);
-        var meetingId = await FindMeeting(id);
-        await using var tx = await db.Database.BeginTransactionAsync();
-        QueueRules.RequireActive(await MeetingLock.Get(db, meetingId));
-        var question = await db.Questions.SingleAsync(q => q.QuestionId == id);
-        if (question.Status == "Withdrawn") throw new ApiException(409, "Withdrawn questions cannot receive votes.");
-        if (await db.QuestionVotes.AnyAsync(v => v.QuestionId == id && v.VisitorTokenHash == hash))
-            throw new ApiException(409, "You have already voted for this question.");
-        db.QuestionVotes.Add(new QuestionVote { QuestionId = id, VisitorTokenHash = hash });
-        await db.SaveChangesAsync(); await tx.CommitAsync();
-        return await GetResponse(id);
+        await db.SaveChangesAsync(); await tx.CommitAsync(); return await GetResponse(id);
     }
     public async Task<QuestionResponseDto> Withdraw(int id, WithdrawQuestionDto dto)
     {
         var meetingId = await FindMeeting(id);
         await using var tx = await db.Database.BeginTransactionAsync();
         QueueRules.RequireActive(await MeetingLock.Get(db, meetingId));
-        var question = await db.Questions.SingleAsync(q => q.QuestionId == id);
-        if (!TokenSecrets.Matches(dto.WithdrawalToken, question.WithdrawalTokenHash))
-            throw new ApiException(403, "This withdrawal token does not belong to the question.");
+        var question = await db.Questions.Include(q => q.User).SingleAsync(q => q.QuestionId == id);
+        var user = await sessions.Optional();
+        var owned = user?.Role == "Visitor" && user.MeetingId == meetingId && user.UserId == question.UserId;
+        // A legacy withdrawal secret authorizes only its original question, never the migrated user.
+        var legacy = question.User.SessionTokenHash == null && dto.WithdrawalToken != null
+            && TokenSecrets.Matches(dto.WithdrawalToken, question.WithdrawalTokenHash);
+        if (!owned && !legacy) throw new ApiException(user == null && dto.WithdrawalToken == null ? 401 : 403, "You can withdraw only your own pending question.");
         if (question.Status != "Pending") throw new ApiException(409, "Only pending questions can be withdrawn.");
         question.Status = "Withdrawn"; question.WithdrawnAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(); await tx.CommitAsync();
-        return await GetResponse(id);
+        await db.SaveChangesAsync(); await tx.CommitAsync(); return await GetResponse(id);
+    }
+    public async Task<QuestionResponseDto> Note(int id, OrganizerNoteDto dto)
+    {
+        var meetingId = await FindMeeting(id); await sessions.Require(meetingId, "Organizer");
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await MeetingLock.Get(db, meetingId);
+        var question = await db.Questions.SingleAsync(q => q.QuestionId == id);
+        question.OrganizerNote = string.IsNullOrWhiteSpace(dto.OrganizerNote) ? null : dto.OrganizerNote.Trim();
+        await db.SaveChangesAsync(); await tx.CommitAsync(); return await GetResponse(id);
     }
 }

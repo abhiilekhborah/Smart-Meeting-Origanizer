@@ -1,217 +1,154 @@
 # Smart Meet — VS Code startup and PostgreSQL guide
 
-This guide explains how to run the project in VS Code on macOS and inspect its PostgreSQL tables.
+## 1. Open the project
 
-## 1. Open the correct folder in VS Code
+Open the folder containing `SmartMeet.slnx`, `SmartMeet.API` and `smart-meet-frontend` in VS Code. Run the commands below from that folder unless a different location is specified.
 
-Clone the repository into your home folder, then choose **File → Open Folder** and open the cloned folder (adjust the path if you cloned elsewhere):
-
-```text
-~/Smart-Meeting-Origanizer
-```
-
-You should see `SmartMeet.API`, `SmartMeet.Tests`, `smart-meet-frontend`, and `SmartMeet.slnx` in the Explorer.
-
-Open **Terminal → New Terminal**. Use the **+** button in the terminal panel to create additional terminals. Keep one terminal running the backend and another running the frontend. You can use a third terminal for database queries.
-
-## 2. Start PostgreSQL
-
-In a terminal, run:
-
-```bash
-brew services start postgresql@16
-pg_isready -h localhost -p 5432
-```
-
-Expected result:
-
-```text
-localhost:5432 - accepting connections
-```
-
-PostgreSQL runs as a background service. Closing this terminal does not stop it.
-
-If `pg_isready` or `psql` is not found, add the installed PostgreSQL tools to this terminal's PATH:
-
-```bash
-export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
-```
-
-Then retry the command. This PATH change applies to the current terminal only.
-
-## 3. Start the backend — terminal 1
-
-### Make .NET available
-
-Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), reopen VS Code, and verify it is available:
+Install .NET 10 SDK, Node.js 24/npm, and PostgreSQL 16+. Check:
 
 ```bash
 dotnet --version
+node --version
+npm --version
 ```
 
-### Restore packages and apply pending migrations
+If this Mac still uses the temporary SDK, it is available for the current session with:
 
 ```bash
-cd ~/Smart-Meeting-Origanizer
+export DOTNET_ROOT=/tmp/smartmeet-dotnet
+export PATH="$DOTNET_ROOT:$PATH"
+```
+
+Install the permanent SDK for long-term use; temporary files can disappear.
+
+## 2. Start PostgreSQL
+
+```bash
+brew services start postgresql@16
+export PATH="$(brew --prefix postgresql@16)/bin:$PATH"
+pg_isready -h localhost -p 5432
+```
+
+The default connection uses database `SmartMeetDB` and your OS username. Set a custom connection with user secrets as described in [README.md](README.md) if required.
+
+## 3. Back up before the restructuring update
+
+Stop the old API with Ctrl+C before changing its schema. The new migration removes votes and announcements permanently. Meetings and questions are retained.
+
+```bash
+mkdir -p backups
+pg_dump -h localhost -d SmartMeetDB -Fc -f backups/before-user-restructure.dump
+pg_restore --list backups/before-user-restructure.dump
+```
+
+Read [docs/MIGRATION.md](docs/MIGRATION.md) for restore verification and the legacy identity policy. Keep backups private; they contain participant details and token hashes. `backups/` is ignored by Git.
+
+## 4. Backend — terminal 1
+
+```bash
 dotnet restore SmartMeet.slnx
 dotnet tool restore
 dotnet ef database update --project SmartMeet.API
-```
-
-On a fresh installation, this creates the database/schema when the PostgreSQL role has the required permissions. Running `database update` again checks for pending migrations; it does not reset existing records.
-
-Do not generate another initial migration or recreate the database just to start the app.
-
-### Run the API
-
-```bash
 dotnet run --project SmartMeet.API
 ```
 
-Expected output includes:
+Keep the terminal running. Open [Swagger](http://localhost:5050/swagger) or [meetings](http://localhost:5050/api/meetings). Running migrations again checks pending changes without resetting records.
 
-```text
-Now listening on: http://localhost:5050
-```
+## 5. Frontend — terminal 2
 
-Keep this terminal running. Open:
-
-- [Swagger API documentation](http://localhost:5050/swagger)
-- [Meetings API](http://localhost:5050/api/meetings)
-
-### Subsequent backend starts
-
-With the .NET SDK installed, you normally only need:
+From the repository root:
 
 ```bash
-cd ~/Smart-Meeting-Origanizer
-dotnet run --project SmartMeet.API
-```
-
-Run `dotnet ef database update --project SmartMeet.API` whenever new migrations have been added.
-
-## 4. Start the frontend — terminal 2
-
-Open another VS Code terminal:
-
-```bash
-cd ~/Smart-Meeting-Origanizer/smart-meet-frontend
-```
-
-Install dependencies on a fresh copy, or after dependency changes:
-
-```bash
+cd smart-meet-frontend
 npm ci
-```
-
-Then start Angular:
-
-```bash
 npm start
 ```
 
-Keep this terminal running. Open [Smart Meet](http://localhost:4200).
+Open [Smart Meet](http://localhost:4200). For subsequent starts, `npm start` is normally enough; `npm ci` is needed after cloning or dependency changes.
 
-The frontend forwards `/api` requests to the backend on port 5050. You need both servers running to use the app.
+## 6. Use the application
 
-## 5. Use the application
+1. Create a meeting with title, optional description, organizer name, and organization.
+2. The organizer session is saved in that browser. Keep it to retain management access.
+3. Copy the invitation link and open the visitor view.
+4. Join with name, organization, and optional email. Refresh reuses the stored session rather than joining again.
+5. Submit a question and category. Use the microphone if desired; review the text before submitting.
+6. In organizer view, search/filter questions, select the next FIFO speaker, mark answers, and add notes.
+7. Open Participants to see users and activity. Active means seen within 60 seconds; closing a tab may take that long to disappear from the active count.
+8. End the meeting and review the summary. Joining and submissions then close.
 
-1. Open the home page and create a meeting, or open an existing one.
-2. The **Organizer** view manages questions, speakers, announcements, and summaries. It has no question-submission form.
-3. Click **Copy invite link** and open the visitor URL in another tab.
-4. The **Visitor** view submits questions by typing or voice, upvotes questions, and withdraws its own pending questions.
-5. As organizer, use **Pick next question** and **Mark as answered**.
-6. Use search and status filters to review questions. Neither filters nor votes change FIFO selection.
-7. End the meeting to see its summary. An unanswered current speaker returns to Pending.
+New question ownership comes from the server-validated session. A name or UserId alone grants no permission. Older meetings remain read-only because their organizer identities were never recorded. Older private question-withdrawal keys still work for their original pending questions.
 
-For voice input, try Google Chrome and allow microphone access. Brave can expose the speech API but fail to connect to its speech service. Live speech depends on browser support and the browser's recognition service.
-
-Use the same browser and address consistently for visitor ownership: `localhost:4200` and `127.0.0.1:4200` have separate browser storage. Clearing storage can remove withdrawal keys and voting identity.
-
-## 6. Connect to the database — terminal 3
-
-In a new terminal, run:
+## 7. Connect to PostgreSQL — terminal 3
 
 ```bash
 psql -h localhost -p 5432 -d SmartMeetDB
 ```
 
-You should now see a PostgreSQL prompt such as:
+Inside the psql prompt:
 
 ```text
-SmartMeetDB=#
+\conninfo
+\dt
+\d "Users"
+\d "Meetings"
+\d "Questions"
 ```
 
-**The following table and SQL commands go inside this PostgreSQL prompt.** Do not type the prompt itself. Do not run shell commands such as `npm start` inside psql; exit with `\q` first or use another terminal.
+There should be three application tables and `__EFMigrationsHistory`.
 
-### Basic database commands
-
-| Command | What it does |
-|---|---|
-| `\conninfo` | Show the connected database, role, host, and port |
-| `\l` | List databases |
-| `\dt` | List tables in the current database |
-| `\d "Meetings"` | Show meeting columns, types, indexes, and constraints |
-| `\d "Questions"` | Show question columns, types, indexes, and constraints |
-| `\d "QuestionVotes"` | Show vote columns and the duplicate-vote unique index |
-| `\d "Announcements"` | Show announcement columns and relationships |
-| `\q` | Exit psql and return to the normal terminal |
-
-Backslash commands do not need a semicolon. SQL queries below **do** need a semicolon. Table and column names are case-sensitive here, so keep their double quotes.
-
-## 7. View the tables' data
-
-### Meetings
+### Meetings and organizer names
 
 ```sql
-SELECT * FROM "Meetings" ORDER BY "MeetingId";
+SELECT m."MeetingId", m."Title", m."Description", m."MeetingCode",
+       u."UserId" AS "OrganizerId", u."Name" AS "OrganizerName",
+       m."StartedAt", m."EndedAt", m."Status"
+FROM "Meetings" m
+LEFT JOIN "Users" u ON u."MeetingId" = m."MeetingId" AND u."Role" = 'Organizer'
+ORDER BY m."MeetingId";
 ```
 
-Important columns: `MeetingId`, `Title`, `CreatedAt`, `Status`, and `EndedAt`. Meetings ended before the summary feature was added can have an unknown (`NULL`) end time.
+`OrganizerId` is derived from the unique Organizer user. It is not a separate Meetings column.
 
-### Questions
+### Users
 
 ```sql
-SELECT * FROM "Questions" ORDER BY "QuestionId";
+SELECT "UserId", "MeetingId", "Name", "Email", "Organization", "Role",
+       "JoinedAt", "LastSeenAt", "IsActive",
+       ("SessionTokenHash" IS NULL) AS "HistoricalParticipant"
+FROM "Users" ORDER BY "MeetingId", "UserId";
 ```
 
-For a narrower, easier-to-read result:
+Raw session tokens are never stored in PostgreSQL. A null hash denotes an unclaimed historical user, not an available login.
+
+### Questions and participant details
 
 ```sql
-SELECT "QuestionId", "MeetingId", "Name", "Organization",
-       "QuestionText", "Status", "SubmittedAt",
-       "SpeakingStartedAt", "AnsweredAt", "WithdrawnAt"
-FROM "Questions"
-ORDER BY "QuestionId" DESC;
+SELECT q."QuestionId", q."MeetingId", q."UserId", u."Name", u."Organization",
+       q."QuestionText", q."Category", q."Status", q."SubmittedAt",
+       q."SpeakingStartedAt", q."AnsweredAt", q."WithdrawnAt",
+       q."SpeakingDurationSeconds", q."OrganizerNote"
+FROM "Questions" q JOIN "Users" u
+  ON u."UserId" = q."UserId" AND u."MeetingId" = q."MeetingId"
+ORDER BY q."SubmittedAt", q."QuestionId";
 ```
 
-Statuses are `Pending`, `Speaking`, `Answered`, or `Withdrawn`. Withdrawn questions remain stored for history and summaries.
-
-### Votes
+### Joined and active visitor counts
 
 ```sql
-SELECT * FROM "QuestionVotes" ORDER BY "Id";
+SELECT m."MeetingId", m."Title",
+       COUNT(u."UserId") AS "JoinedVisitors",
+       COUNT(u."UserId") FILTER (
+           WHERE m."Status" = 'Active' AND u."IsActive"
+             AND u."LastSeenAt" >= now() - interval '60 seconds'
+       ) AS "ActiveVisitors"
+FROM "Meetings" m
+LEFT JOIN "Users" u ON u."MeetingId" = m."MeetingId"
+  AND u."Role" = 'Visitor' AND u."SessionTokenHash" IS NOT NULL
+GROUP BY m."MeetingId", m."Title" ORDER BY m."MeetingId";
 ```
 
-Each row is one vote. `VisitorTokenHash` contains a hash, not the raw anonymous browser token.
-
-To view the vote total for every question, including zero-vote questions:
-
-```sql
-SELECT q."QuestionId", q."Name", q."QuestionText",
-       COUNT(v."Id") AS "VoteCount"
-FROM "Questions" q
-LEFT JOIN "QuestionVotes" v ON v."QuestionId" = q."QuestionId"
-GROUP BY q."QuestionId", q."Name", q."QuestionText"
-ORDER BY q."QuestionId";
-```
-
-### Announcements
-
-```sql
-SELECT * FROM "Announcements"
-ORDER BY "CreatedAt" DESC, "Id" DESC;
-```
+Counts are calculated from joined visitor rows rather than stored in a duplicate TotalParticipants column. Historical unclaimed participants are excluded from registered counts.
 
 ### Applied migrations
 
@@ -219,131 +156,42 @@ ORDER BY "CreatedAt" DESC, "Id" DESC;
 SELECT * FROM "__EFMigrationsHistory" ORDER BY "MigrationId";
 ```
 
-The current project has the `InitialPostgres` and `AddMeetingParticipationFeatures` migrations. This history table is maintained by EF Core.
+Use `\x` for expanded rows, `\pset pager off` to disable the output pager, and `\q` to exit. SQL needs a semicolon; backslash commands do not. Keep quoted mixed-case identifiers.
 
-## 8. Inspect one meeting
+## 8. Sessions in Swagger
 
-First find its ID in the Meetings table. This example uses meeting **4**; replace `4` with your meeting's ID:
+Create a meeting or join one, then copy the returned `sessionToken` into Swagger's Authorize dialog. Use the organizer token for management/participant listing and a visitor token for question submission or withdrawal. This is an opaque bearer token, not a JWT. Do not put tokens into URLs or share screenshots containing them.
 
-```text
-\set meeting_id 4
-```
+## 9. Stop and troubleshoot
 
-Then run:
-
-```sql
-SELECT * FROM "Meetings" WHERE "MeetingId" = :meeting_id;
-
-SELECT "QuestionId", "Name", "QuestionText", "Status"
-FROM "Questions"
-WHERE "MeetingId" = :meeting_id
-ORDER BY "SubmittedAt", "QuestionId";
-
-SELECT "Status", COUNT(*) AS "QuestionCount"
-FROM "Questions"
-WHERE "MeetingId" = :meeting_id
-GROUP BY "Status"
-ORDER BY "Status";
-
-SELECT "Id", "Message", "CreatedAt"
-FROM "Announcements"
-WHERE "MeetingId" = :meeting_id
-ORDER BY "CreatedAt" DESC, "Id" DESC;
-```
-
-The variable syntax `:meeting_id` works inside psql. In another SQL client, replace it with the actual numeric ID.
-
-## 9. Make database output easier to read
-
-For wide tables, toggle vertical/expanded output:
-
-```text
-\x
-```
-
-Rerun your query. Each record will appear vertically. Run `\x` again to switch back.
-
-If output opens a scrolling viewer, press **q** to return to the database prompt. To disable that viewer for this session:
-
-```text
-\pset pager off
-```
-
-If the prompt changes to `SmartMeetDB-#`, PostgreSQL is usually waiting for the rest of an unfinished statement. Add the missing semicolon, or press **Ctrl+C** to cancel the unfinished input.
-
-## 10. Confirm that application changes are saved
-
-1. Create a new meeting in the app.
-2. Query `"Meetings"` and find its ID.
-3. Submit a visitor question, then query `"Questions"` for that meeting.
-4. Upvote it and check `"QuestionVotes"` or the vote-count query.
-5. Publish an announcement and query `"Announcements"`.
-6. Mark a speaking question answered or withdraw an owned pending question, then rerun the question query.
-7. End the meeting and check `"Meetings"."EndedAt"` and the saved question statuses.
-
-Records remain after refreshing the browser or restarting the API. Raw withdrawal tokens are returned only when a question is created and kept in that browser; the database contains only `WithdrawalTokenHash`. Old questions without that hash cannot be withdrawn through the app.
-
-## 11. Stop and restart safely
-
-- In the backend terminal, press **Ctrl+C** to stop the API.
-- In the frontend terminal, press **Ctrl+C** to stop Angular.
-- Use `\q` to disconnect from psql; this does not stop PostgreSQL.
-- PostgreSQL can remain running between development sessions. To stop the service intentionally:
-
-```bash
-brew services stop postgresql@16
-```
-
-Start the service again before the next app session. Stopping services does not delete database records.
-
-### Port already in use
-
-Only run one server on each port. Check existing listeners:
+Stop the frontend/backend with Ctrl+C in their respective terminals. `\q` disconnects psql without stopping PostgreSQL. To check occupied application ports:
 
 ```bash
 lsof -nP -iTCP:4200 -iTCP:5050 -sTCP:LISTEN
 ```
 
-`4200` belongs to Angular and `5050` to the API. Stop the previous instance with **Ctrl+C** in its terminal. If that terminal is unavailable, identify its process ID from `lsof` and use `kill -TERM PID`, replacing `PID` with the verified process ID. Then restart the affected server. Do not stop PostgreSQL just to resolve an Angular/API port conflict.
-
-## 12. Common problems
-
-| Problem | What to check |
+| Issue | Check |
 |---|---|
-| `dotnet: command not found` | Install the .NET 10 SDK and reopen the terminal. |
-| `psql: command not found` | Add `/opt/homebrew/opt/postgresql@16/bin` to PATH. |
-| PostgreSQL connection refused | Start `postgresql@16` and run `pg_isready`. |
-| PostgreSQL role/password error | Set your actual role/credentials in the connection string; see the README. |
-| `SmartMeetDB` or a table does not exist | Run the EF database-update command using the same connection string as the API. |
-| `relation meetings does not exist` | Use the exact quoted name `"Meetings"`, not unquoted `meetings`. |
-| API startup stack trace | Read the first error above the trace; check whether port 5050 is already in use. |
-| Frontend displays connection errors | Confirm PostgreSQL and the API are running, then use Retry/Refresh. |
-| Many `Executed DbCommand` logs | Normal successful SQL logging; active dashboards poll every four seconds. |
-| Voice input fails in Brave | Try the same meeting URL in Google Chrome and allow microphone access. |
+| Missing dotnet/npm | Install the required SDK/runtime and reopen the terminal. |
+| PostgreSQL unavailable | Start the service; check port, username, and connection string. |
+| Missing tables/columns | Apply migrations using the same connection configuration as the API. |
+| API connection errors | Start the backend on 5050 and use Retry. |
+| 401 session error | Join again as a visitor; organizer access requires the original stored token. |
+| 403 forbidden | The session belongs to a different meeting/role or another question owner. |
+| Read-only old meeting | Legacy organizers cannot be safely reconstructed. Create a new meeting for management. |
+| Voice fails in Brave | Try Chrome and check microphone permission. |
+| Active count remains after tab closes | Wait up to the 60-second inactivity threshold and the next poll. |
 
-The configured development connection is `Host=localhost;Port=5432;Database=SmartMeetDB;Timeout=5`. It uses your current operating-system username unless overridden. For custom roles/passwords, use environment configuration or .NET user secrets as explained in [README.md](README.md); do not put credentials in committed files.
-
-## 13. Optional builds and tests
-
-From the SmartMeet folder, with the SDK available:
+## 10. Checks
 
 ```bash
 dotnet build SmartMeet.slnx
-dotnet test SmartMeet.Tests/SmartMeet.Tests.csproj
 ```
 
-From the frontend folder:
+In the frontend folder:
 
 ```bash
 npm run build
-npm test
 ```
 
-With the API and PostgreSQL running, from SmartMeet:
-
-```bash
-python3 SmartMeet.Tests/api_smoke.py
-python3 SmartMeet.Tests/feature_smoke.py
-```
-
-The API smoke tests create clearly named test meetings and retain them for inspection. They are optional and are not needed just to start the app.
+Test folders are not required to run the application and have been removed. Historical verification results are recorded in [docs/VERIFICATION.md](docs/VERIFICATION.md).

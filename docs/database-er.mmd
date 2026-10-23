@@ -1,0 +1,41 @@
+erDiagram
+    Meetings ||--o{ Users : "has participants (one Organizer)"
+    Meetings ||--o{ Questions : contains
+    Users ||--o{ Questions : submits
+    Meetings {
+        integer MeetingId PK
+        varchar200 Title
+        text Description "nullable"
+        varchar20 MeetingCode UK
+        timestamptz CreatedAt
+        timestamptz StartedAt
+        timestamptz EndedAt "nullable"
+        varchar20 Status
+    }
+    Users {
+        integer UserId PK
+        integer MeetingId FK "part of alternate key with UserId"
+        varchar100 Name
+        varchar150 Email "nullable"
+        varchar150 Organization
+        varchar20 Role
+        timestamptz JoinedAt
+        timestamptz LastSeenAt "nullable"
+        boolean IsActive
+        varchar64 SessionTokenHash UK "nullable; internal"
+    }
+    Questions {
+        integer QuestionId PK
+        integer MeetingId FK "also part of composite user FK"
+        integer UserId FK "composite FK: UserId + MeetingId"
+        text QuestionText
+        varchar50 Category "nullable"
+        varchar20 Status
+        timestamptz SubmittedAt
+        timestamptz SpeakingStartedAt "nullable"
+        timestamptz AnsweredAt "nullable"
+        timestamptz WithdrawnAt "nullable"
+        integer SpeakingDurationSeconds "nullable"
+        text OrganizerNote "nullable"
+        varchar64 WithdrawalTokenHash "nullable; legacy only"
+    }

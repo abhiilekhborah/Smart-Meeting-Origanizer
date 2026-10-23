@@ -5,8 +5,16 @@ using SmartMeet.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<SessionService>();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(o => {
+    o.AddSecurityDefinition("Session", new Microsoft.OpenApi.OpenApiSecurityScheme {
+        Type = Microsoft.OpenApi.SecuritySchemeType.Http, Scheme = "bearer",
+        Description = "Server-issued anonymous session token returned by create meeting or join. Not a JWT." });
+    o.AddSecurityRequirement(document => new Microsoft.OpenApi.OpenApiSecurityRequirement {
+        [new Microsoft.OpenApi.OpenApiSecuritySchemeReference("Session", document)] = new List<string>() });
+});
 builder.Services.AddDbContext<SmartMeetDbContext>(o => o.UseNpgsql(builder.Configuration.GetConnectionString("SmartMeetDB")));
 builder.Services.AddScoped<IMeetingService, MeetingService>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();

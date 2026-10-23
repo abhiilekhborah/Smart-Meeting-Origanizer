@@ -6,7 +6,7 @@ namespace SmartMeet.API.Controllers;
 [ApiController, Route("api/questions")]
 public class QuestionsController(IQuestionService questions) : ControllerBase
 {
-    [HttpPost, ProducesResponseType(typeof(CreatedQuestionResponseDto), StatusCodes.Status201Created)]
+    [HttpPost, ProducesResponseType(typeof(QuestionResponseDto), 201)]
     public async Task<IActionResult> Create(CreateQuestionDto dto)
     {
         var q = await questions.Create(dto);
@@ -22,8 +22,6 @@ public class QuestionsController(IQuestionService questions) : ControllerBase
     }
     [HttpPut("meeting/{id:int}/next")] public async Task<IActionResult> Next(int id) => Ok(await questions.Next(id));
     [HttpPut("{id:int}/answer")] public async Task<IActionResult> Answer(int id) => Ok(await questions.Answer(id));
-    [HttpPost("{id:int}/upvote"), ProducesResponseType(typeof(QuestionResponseDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Upvote(int id, UpvoteDto dto) => Ok(await questions.Upvote(id, dto));
-    [HttpPost("{id:int}/withdraw"), ProducesResponseType(typeof(QuestionResponseDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Withdraw(int id, WithdrawQuestionDto dto) => Ok(await questions.Withdraw(id, dto));
+    [HttpPost("{id:int}/withdraw")] public async Task<IActionResult> Withdraw(int id, WithdrawQuestionDto dto) => Ok(await questions.Withdraw(id, dto));
+    [HttpPut("{id:int}/note")] public async Task<IActionResult> Note(int id, OrganizerNoteDto dto) => Ok(await questions.Note(id, dto));
 }

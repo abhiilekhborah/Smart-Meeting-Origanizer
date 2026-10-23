@@ -1,45 +1,42 @@
 import { Injectable, signal } from '@angular/core';
+import { HttpHeaders } from '@angular/common/http';
+import { UserSession } from '../models/meeting.model';
 
-const tokenPattern = /^[a-f0-9]{64}$/i;
 @Injectable({ providedIn: 'root' })
 export class VisitorSessionService {
-  private readonly ownershipKey = 'smartMeet.withdrawalTokens';
-  private readonly votesKey = 'smartMeet.votedQuestions';
-  private memoryToken = '';
-  readonly ownership = signal<Record<number, string>>(this.readOwnership());
-  readonly voted = signal<number[]>(this.readVotes());
+  private readonly memory = new Map<string, UserSession>();
   readonly storageWarning = signal(false);
-  private read(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } }
-  private write(key: string, value: string): boolean {
-    try { localStorage.setItem(key, value); return true; } catch { this.storageWarning.set(true); return false; }
-  }
-  private readOwnership(): Record<number, string> {
+  // Retain old keys only to withdraw the exact legacy question they belong to.
+  readonly ownership = signal<Record<number, string>>(this.readLegacy());
+  private key(id: number, role: string) { return `smartMeet.session.${id}.${role}`; }
+  private readLegacy(): Record<number, string> {
     try {
-      const raw = JSON.parse(this.read(this.ownershipKey) || '{}');
-      const result: Record<number,string> = {};
-      for (const [id, token] of Object.entries(raw)) {
-        if (Number.isSafeInteger(Number(id)) && Number(id)>0 && typeof token==='string' && tokenPattern.test(token)) result[Number(id)]=token;
-      }
-      return result;
+      const value = JSON.parse(localStorage.getItem('smartMeet.withdrawalTokens') || '{}');
+      return Object.fromEntries(Object.entries(value).filter(([id, token]) => Number(id)>0 && typeof token==='string' && /^[a-f0-9]{64}$/i.test(token))) as Record<number,string>;
     } catch { return {}; }
   }
-  private readVotes(): number[] {
-    try { const raw = JSON.parse(this.read(this.votesKey) || '[]'); return Array.isArray(raw) ? raw.filter(id => Number.isSafeInteger(id) && id > 0) : []; }
-    catch { return []; }
+  get(id: number, role: string): UserSession | null {
+    const key = this.key(id, role);
+    if (this.memory.has(key)) return this.memory.get(key)!;
+    try {
+      const value = JSON.parse(localStorage.getItem(key) || 'null') as UserSession | null;
+      if (value && /^[a-f0-9]{64}$/i.test(value.sessionToken) && value.user.meetingId === id && value.user.role.toLowerCase() === role.toLowerCase()) {
+        this.memory.set(key, value); return value;
+      }
+    } catch { /* Invalid or unavailable browser storage. */ }
+    return null;
   }
-  visitorToken(): string {
-    const stored = this.read('smartMeet.visitorToken');
-    if (stored && tokenPattern.test(stored)) return stored;
-    if (!this.memoryToken) this.memoryToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2,'0')).join('');
-    this.write('smartMeet.visitorToken', this.memoryToken); return this.memoryToken;
+  save(value: UserSession) {
+    const key = this.key(value.user.meetingId, value.user.role.toLowerCase()); this.memory.set(key, value);
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch { this.storageWarning.set(true); }
   }
-  rememberQuestion(id: number, token: string): boolean {
-    const ownership = { ...this.ownership(), [id]: token };
-    this.ownership.set(ownership); return this.write(this.ownershipKey, JSON.stringify(ownership));
+  clear(id: number, role: string) {
+    const key = this.key(id, role); this.memory.delete(key);
+    try { localStorage.removeItem(key); } catch { this.storageWarning.set(true); }
   }
-  rememberVote(id: number) {
-    if (!this.voted().includes(id)) this.voted.update(ids => [...ids, id]);
-    this.write(this.votesKey, JSON.stringify(this.voted()));
+  headers(id: number, role: string): HttpHeaders {
+    const value = this.get(id, role);
+    return value ? new HttpHeaders({ Authorization: `Bearer ${value.sessionToken}` }) : new HttpHeaders();
   }
-  tokenFor(id: number): string | undefined { return this.ownership()[id]; }
+  tokenFor(id: number) { return this.ownership()[id]; }
 }

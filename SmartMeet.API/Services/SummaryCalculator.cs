@@ -4,9 +4,9 @@ namespace SmartMeet.API.Services;
 
 public static class SummaryCalculator
 {
-    public static MeetingSummaryDto Calculate(Meeting meeting, IReadOnlyCollection<Question> questions, int votes) =>
-        new(meeting.MeetingId, meeting.Title, meeting.Status, meeting.CreatedAt, meeting.EndedAt,
-            meeting.EndedAt is DateTime end ? Math.Max(0, (end - meeting.CreatedAt).TotalSeconds) : null,
+    public static MeetingSummaryDto Calculate(Meeting meeting, IReadOnlyCollection<Question> questions, int participants) =>
+        new(meeting.MeetingId, meeting.Title, meeting.Status, meeting.StartedAt, meeting.EndedAt,
+            meeting.EndedAt is DateTime end ? Math.Max(0, (end - meeting.StartedAt).TotalSeconds) : null,
             questions.Count, questions.Count(q => q.Status == "Answered"), questions.Count(q => q.Status == "Pending"),
-            questions.Count(q => q.Status == "Withdrawn"), votes);
+            questions.Count(q => q.Status == "Withdrawn"), participants);
 }

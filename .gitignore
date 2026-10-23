@@ -32,3 +32,6 @@
 .vs/
 *.user
 *.suo
+
+# Local migration safety backups
+backups/
