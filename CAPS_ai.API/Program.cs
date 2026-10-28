@@ -3,7 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using CAPS_ai.API.Data;
 using CAPS_ai.API.Services;
 
-var builder = WebApplication.CreateBuilder(args);
+var migrateOnly = args.Contains("--migrate");
+var builder = WebApplication.CreateBuilder(args.Where(a => a != "--migrate").ToArray());
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<SessionService>();
@@ -15,11 +16,17 @@ builder.Services.AddSwaggerGen(o => {
     o.AddSecurityRequirement(document => new Microsoft.OpenApi.OpenApiSecurityRequirement {
         [new Microsoft.OpenApi.OpenApiSecuritySchemeReference("Session", document)] = new List<string>() });
 });
-builder.Services.AddDbContext<CAPS_aiDbContext>(o => o.UseNpgsql(builder.Configuration.GetConnectionString("SmartMeetDB")));
+builder.Services.AddDbContext<CAPS_aiDbContext>(o => o.UseNpgsql(DatabaseConfiguration.Resolve(builder.Configuration)));
 builder.Services.AddScoped<IMeetingService, MeetingService>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins("http://localhost:4200").AllowAnyHeader().AllowAnyMethod()));
 var app = builder.Build();
+if (migrateOnly)
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    await DeploymentMigration.ApplyAsync(scope.ServiceProvider.GetRequiredService<CAPS_aiDbContext>());
+    return;
+}
 app.Use(async (context, next) =>
 {
     try { await next(); }
@@ -41,6 +48,24 @@ app.Use(async (context, next) =>
 });
 app.UseCors();
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
+var indexFile = Path.Combine(app.Environment.ContentRootPath, "wwwroot", "index.html");
+if (File.Exists(indexFile))
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+app.MapGet("/health/ready", async (CAPS_aiDbContext db) =>
+    await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ready" }) : Results.StatusCode(503));
 app.MapControllers();
+if (File.Exists(indexFile))
+{
+    app.MapFallback(async context => {
+        if (context.Request.Path.StartsWithSegments("/api") || Path.HasExtension(context.Request.Path.Value))
+        { context.Response.StatusCode = StatusCodes.Status404NotFound; return; }
+        context.Response.ContentType = "text/html; charset=utf-8";
+        await context.Response.SendFileAsync(indexFile);
+    });
+}
 app.Run();
 public partial class Program { }

@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: caps-ai-meetings-organizer
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health/ready
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: RUN_MIGRATIONS
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: caps-ai-db
+          property: connectionString
+
+databases:
+  - name: caps-ai-db
+    plan: free
+    region: singapore
+    postgresMajorVersion: "16"
+    databaseName: caps_ai_db
+    user: caps_ai_db_user
+    ipAllowList: []

@@ -237,3 +237,7 @@ API additions: `GET /api/meetings/by-code/{code}` and `POST /api/meetings/by-cod
 - [Codebase report](CODEBASE_REPORT.md)
 - [Migration safety, backup, and verification](docs/MIGRATION.md)
 - [Database diagrams](docs/DATABASE_DIAGRAMS.md)
+
+## Render deployment
+
+See [Render deployment and monitoring](docs/RENDER_DEPLOYMENT.md) for the combined Docker service, secret database settings, health endpoints, and free-plan limits.
