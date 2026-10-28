@@ -1,26 +1,26 @@
-# Smart Meet — Codebase Report
+# CAPS.ai Meetings Organizer — Codebase Report
 
 ## 1. Purpose and structure
 
 Smart Meet manages meeting participants, questions, and FIFO speaking order. Angular provides the interface, ASP.NET Core implements the API and application rules, and EF Core/Npgsql persists data in PostgreSQL.
 
 ```text
-SmartMeet/
-├── SmartMeet.API/          Backend
-├── smart-meet-frontend/    Angular frontend
+CAPS_ai/
+├── CAPS_ai.API/          Backend
+├── CAPS_ai-frontend/    Angular frontend
 ├── docs/                  Migration guide and database diagrams
-├── SmartMeet.slnx          .NET solution
+├── CAPS_ai.slnx          .NET solution
 ├── .config/               Pinned EF CLI tool
 ├── README.md              Setup, features, architecture, scope
 └── START_HERE.md           VS Code and database inspection guide
 ```
 
-## 2. Backend files — SmartMeet.API
+## 2. Backend files — CAPS_ai.API
 
 | File | Contents |
 |---|---|
 | `Program.cs` | Registers controllers, DbContext, services, HTTP context access, CORS, Swagger bearer-session documentation, and JSON exception handling. |
-| `SmartMeet.API.csproj` | .NET 10 target, EF/Npgsql/Swagger dependencies, and user-secrets identifier. |
+| `CAPS_ai.API.csproj` | .NET 10 target, EF/Npgsql/Swagger dependencies, and user-secrets identifier. |
 | `appsettings.json` | Password-free local PostgreSQL connection and logging configuration. |
 | `Properties/launchSettings.json` | Development environment and port 5050. |
 | `Controllers/MeetingsController.cs` | List/get/create/end/summary routes, visitor join, and organizer-only participant listing. |
@@ -30,7 +30,7 @@ SmartMeet/
 | `Models/Meeting.cs` | Title, description, unique code, creation/start/end times, status, Users and Questions relationships. |
 | `Models/User.cs` | Meeting-linked participant identity, optional email, role, join/activity fields, internal session hash, and questions. |
 | `Models/Question.cs` | Meeting/user ownership, text/category/status, lifecycle times, completed duration, organizer note, and legacy withdrawal hash. |
-| `Data/SmartMeetDbContext.cs` | Three DbSets; explicit restricted relationships; composite user/meeting ownership FK; keys, lengths, status/category/duration constraints; unique code/session/organizer/speaker indexes. |
+| `Data/CAPS_aiDbContext.cs` | Three DbSets; explicit restricted relationships; composite user/meeting ownership FK; keys, lengths, status/category/duration constraints; unique code/session/organizer/speaker indexes. |
 | `Services/SessionService.cs` | Reads bearer token, validates its hash, resolves the actual user, enforces meeting/role, joins/reuses visitors, records heartbeats, and returns participants with effective activity and a historical flag. |
 | `Services/MeetingService.cs` | Transactionally creates meeting plus Organizer user, generates unique codes, derives organizer/count fields, ends meetings, and calculates summaries. Also contains MeetingLock. |
 | `Services/QuestionService.cs` | Session-derived submission ownership, question projection through User, FIFO selection, answer duration, notes, session-owned withdrawal, and restricted legacy-token fallback. |
@@ -41,11 +41,11 @@ SmartMeet/
 | `Migrations/*AddMeetingParticipationFeatures*` | Historical schema changes; retained so existing databases and fresh installations share the same migration chain. |
 | `Migrations/*RestructureUsersAndSessions*` | Creates Users, backfills historical participant identities, adds meeting/question fields, preserves legacy hashes, drops old participant columns and the two removed feature tables, and adds constraints. |
 | `Migrations/*.Designer.cs` | Generated metadata for each historical migration. |
-| `Migrations/SmartMeetDbContextModelSnapshot.cs` | Latest model snapshot used when scaffolding the next migration. |
+| `Migrations/CAPS_aiDbContextModelSnapshot.cs` | Latest model snapshot used when scaffolding the next migration. |
 
 Historical migrations still mention removed tables because they record past schema states. Runtime entities, controllers, DTOs, services, and UI no longer implement those features. The restructuring migration is forward-only; restore the verified backup for recovery.
 
-## 3. Frontend configuration — smart-meet-frontend
+## 3. Frontend configuration — CAPS_ai-frontend
 
 | File | Contents |
 |---|---|
@@ -94,10 +94,10 @@ Most components contain their HTML inside the TypeScript `template` property rat
 
 ## 6. Database design decisions
 
-There are three application tables: Users, Meetings, Questions. EF also maintains `__EFMigrationsHistory`.
+There are three application tables: Meeting, MeetingAttendees, MeetingQuestions. EF also maintains `__EFMigrationsHistory`.
 
 - Each user belongs to one meeting. A person joining another meeting gets a separate meeting-scoped session.
-- The organizer is the unique Organizer user within that meeting. It is returned as OrganizerId/OrganizerName in DTOs; there is no redundant Meetings.OrganizerId column or circular FK.
+- The organizer is the unique Organizer user within that meeting. It is returned as OrganizerId/OrganizerName in DTOs; there is no redundant Meeting.OrganizerId column or circular FK.
 - Every new meeting and organizer are saved in one transaction.
 - Every question references a User and Meeting. The composite user/meeting FK prevents cross-meeting ownership even if incorrect data bypasses the API.
 - Historical questions each receive an unclaimed User preserving their original name/organization. Names are not used to merge identities. Historical session hashes are null; no organizer is invented.
@@ -148,7 +148,7 @@ Browser SpeechRecognition → DictationSession → finalized text event → edit
 | GET | `/api/users/me` | Valid session |
 | POST | `/api/users/heartbeat` | Valid session |
 | PUT | `/api/meetings/{id}/end` | Associated organizer |
-| GET | `/api/meetings/{id}/summary` | Public, ended meetings only |
+| GET | `/api/meetings/{id}/summary` | Associated organizer, ended meetings only |
 | POST | `/api/questions` | Visitor in the same meeting |
 | GET | `/api/questions/meeting/{id}` and `/pending`, `/speaking`, `/answered` | Public |
 | PUT | `/api/questions/meeting/{id}/next` | Associated organizer |
@@ -159,7 +159,7 @@ Swagger includes the anonymous bearer-token scheme. It is an opaque random token
 
 ## 9. Supporting documents
 
-Test source folders and their project/script references have been removed because they are not runtime dependencies. Their removal does not change the frontend, API, or database code. Historical verification results remain in `docs/VERIFICATION.md`.
+Focused verification sources now live under `checks/` and `CAPS_ai-frontend/checks/`; see the updated file list below. They are not runtime dependencies.
 
 | File | Responsibility |
 |---|---|
@@ -170,3 +170,35 @@ Test source folders and their project/script references have been removed becaus
 ## 10. Presentation order
 
 Demonstrate creating a meeting, joining, submitting a categorized question, selecting/answering it, notes, participant activity, and ending. Then trace the form → HTTP client → controller → service → DbContext path. Explain the three tables, anonymous session ownership, preserving legacy migration, FIFO locking, and tests.
+
+## Current UI, invitations, summaries, and table mappings
+
+| File | New or updated responsibility |
+|---|---|
+| `CAPS_ai.API/Services/MeetingCodes.cs` | Secure readable code generation; normalization/validation including old codes. |
+| `CAPS_ai.API/Services/MeetingService.cs` | Case-insensitive lookup, transactional collision retry, and organizer-only per-meeting summary projections in a repeatable-read transaction. Raw meeting-lock SQL now names Meeting. |
+| `CAPS_ai.API/Services/SummaryCalculator.cs` | Participant/question statistics, known completed-duration totals/averages, participant snapshot, and timestamp-derived timeline. |
+| `CAPS_ai.API/DTOs/Requests.cs` | Full summary, snapshot-participant and timeline DTOs. No session hashes or email addresses in summaries. |
+| `CAPS_ai.API/Controllers/MeetingsController.cs` | By-code lookup/join actions; join delegates to the original shared SessionService. |
+| `CAPS_ai.API/Data/CAPS_aiDbContext.cs` | Explicit ToTable mappings: Meeting, MeetingAttendees, MeetingQuestions. C# entity names and existing relationships stay unchanged. |
+| `CAPS_ai.API/Migrations/*RenameMeetingTables*` | In-place table/index/constraint renames and unique lower(MeetingCode) expression index. No DropTable/CreateTable. |
+| `CAPS_ai-frontend/src/app/app-settings.ts` | Public invitation base URL, defaulting to the current origin. |
+| `CAPS_ai-frontend/src/app/services/invitation.ts` | Pure public URL construction, configuration validation, localhost detection. |
+| `CAPS_ai-frontend/src/app/services/invitation.service.ts` | Supplies the configured base/current origin to invitation construction. |
+| `CAPS_ai-frontend/src/app/services/qr-code.ts` | Lazy-loads the QR library and produces a 512-pixel PNG with a quiet zone. |
+| `CAPS_ai-frontend/src/app/components/invite-qr.component.ts` | QR modal contents, fallback, local-address warning, copy action and PNG download. |
+| `CAPS_ai-frontend/src/app/components/join-page.component.ts` | `/join/:code` lookup, invalid/ended states, session reuse, registration, and visitor redirect. |
+| `CAPS_ai-frontend/src/app/components/home.component.ts` | Code entry plus active dashboard links and ended-summary cards. |
+| `CAPS_ai-frontend/src/app/components/dashboard.component.ts` | Compact actual meeting title/organizer/date/status, invitation controls, independent question scrolling, and navigation to summary after ending. |
+| `CAPS_ai-frontend/src/app/components/summary-page.component.ts` | Protected summary loading, missing-session errors, dashboard fallback and retry. |
+| `CAPS_ai-frontend/src/app/components/meeting-summary.component.ts` | Complete snapshot with timing, statistics, visitor/question tables, status filtering and timeline. |
+| `CAPS_ai-frontend/src/features.css` | Compact header/queue styling, responsive wrapping, QR modal and summary tables. |
+| `checks/` and `CAPS_ai-frontend/checks/` | Restored voice/FIFO/session checks plus current code/summary, URL, QR, and rename-integrity coverage. |
+
+The complete summary endpoint is organizer-only. The earlier public-summary behavior is superseded. Old numeric invitation routes still work, but new public invitation links contain codes and never contain session secrets. The timeline includes only saved timestamps; a speaker start cleared by the original end-meeting rule cannot be reconstructed or invented.
+
+## CAPS_ai project rename
+
+The root folder, solution, API project/assembly/namespaces, DbContext and snapshot filenames, frontend folder/package/workspace, check project, launch profile, and documentation paths now use CAPS_ai (or npm-compatible caps-ai). The data model and migration IDs are unchanged; EF reports no pending schema change.
+
+Persisted compatibility names remain intentionally unchanged: SmartMeetDB connection/database, the local user-secrets ID, and smartMeet.* browser session/withdrawal keys. Git history and the existing origin remote stay associated with this renamed local checkout.

@@ -14,8 +14,8 @@ From the repository root with PostgreSQL tools available:
 mkdir -p backups
 pg_dump -h localhost -d SmartMeetDB -Fc -f backups/before-user-restructure.dump
 pg_restore --list backups/before-user-restructure.dump
-createdb -h localhost SmartMeetRestructureVerify
-pg_restore -h localhost -d SmartMeetRestructureVerify backups/before-user-restructure.dump
+createdb -h localhost CAPS_aiRestructureVerify
+pg_restore -h localhost -d CAPS_aiRestructureVerify backups/before-user-restructure.dump
 ```
 
 `backups/` is ignored by Git. Keep the dump private. Restore into a new empty database; do not overwrite another database during verification. Use a distinct name if the verification database already exists.
@@ -40,10 +40,10 @@ Use an environment connection override so your normal database remains untouched
 
 ```bash
 export ASPNETCORE_ENVIRONMENT=Development
-export ConnectionStrings__SmartMeetDB='Host=localhost;Port=5432;Database=SmartMeetRestructureVerify;Timeout=5'
+export ConnectionStrings__SmartMeetDB='Host=localhost;Port=5432;Database=CAPS_aiRestructureVerify;Timeout=5'
 dotnet tool restore
-dotnet ef database update --project SmartMeet.API
-dotnet run --project SmartMeet.API --no-launch-profile --urls http://localhost:5051
+dotnet ef database update --project CAPS_ai.API
+dotnet run --project CAPS_ai.API --no-launch-profile --urls http://localhost:5051
 ```
 
 Inspect the restored copy with `psql` before using it. Confirm original meeting/question IDs, texts, timestamps, statuses, and participant names are preserved through the Users relationship. Confirm that Users, Meetings, Questions, and EF migration history are the only tables after migration.
@@ -56,8 +56,8 @@ After backup verification, testing, and approval to discard votes/announcements:
 
 ```bash
 unset ConnectionStrings__SmartMeetDB
-dotnet ef database update --project SmartMeet.API
-dotnet run --project SmartMeet.API
+dotnet ef database update --project CAPS_ai.API
+dotnet run --project CAPS_ai.API
 ```
 
 If you use a custom normal connection, set that connection instead of simply unsetting the override. Restart the API and reload the frontend so both use the new contracts.
@@ -69,9 +69,9 @@ This migration's Down method intentionally refuses a destructive schema downgrad
 First stop application writes. Restore the pre-migration backup into a separate recovery database, then verify it:
 
 ```bash
-createdb -h localhost SmartMeetRecovery
-pg_restore -h localhost -d SmartMeetRecovery backups/before-user-restructure.dump
-psql -h localhost -d SmartMeetRecovery -c '\dt'
+createdb -h localhost CAPS_aiRecovery
+pg_restore -h localhost -d CAPS_aiRecovery backups/before-user-restructure.dump
+psql -h localhost -d CAPS_aiRecovery -c '\dt'
 ```
 
 Use the pre-restructuring application version with that database. Switching back also discards post-backup application changes unless you separately reconcile them; do not overwrite the working database casually. The dump restores the original feature tables and records.

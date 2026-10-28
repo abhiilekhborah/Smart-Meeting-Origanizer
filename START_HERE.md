@@ -1,8 +1,12 @@
-# Smart Meet — VS Code startup and PostgreSQL guide
+# CAPS.ai Meetings Organizer — VS Code startup and PostgreSQL guide
+
+Open the renamed folder: `/Users/abhilekhborah/Desktop/Assigment_1/CAPS_ai`.
+
+The existing PostgreSQL database remains SmartMeetDB. No database migration is needed for the project/folder rename. Its history table was previously deleted by request: skip `dotnet ef database update` on this working installation unless the matching history backup is first restored and checked. You can run the API normally with `dotnet run --project CAPS_ai.API`.
 
 ## 1. Open the project
 
-Open the folder containing `SmartMeet.slnx`, `SmartMeet.API` and `smart-meet-frontend` in VS Code. Run the commands below from that folder unless a different location is specified.
+Open the folder containing `CAPS_ai.slnx`, `CAPS_ai.API` and `CAPS_ai-frontend` in VS Code. Run the commands below from that folder unless a different location is specified.
 
 Install .NET 10 SDK, Node.js 24/npm, and PostgreSQL 16+. Check:
 
@@ -12,14 +16,7 @@ node --version
 npm --version
 ```
 
-If this Mac still uses the temporary SDK, it is available for the current session with:
-
-```bash
-export DOTNET_ROOT=/tmp/smartmeet-dotnet
-export PATH="$DOTNET_ROOT:$PATH"
-```
-
-Install the permanent SDK for long-term use; temporary files can disappear.
+Use the installed .NET SDK (`dotnet --version`). A previous temporary SDK under `/tmp` is not required.
 
 ## 2. Start PostgreSQL
 
@@ -31,9 +28,9 @@ pg_isready -h localhost -p 5432
 
 The default connection uses database `SmartMeetDB` and your OS username. Set a custom connection with user secrets as described in [README.md](README.md) if required.
 
-## 3. Back up before the restructuring update
+## 3. Back up before database updates
 
-Stop the old API with Ctrl+C before changing its schema. The new migration removes votes and announcements permanently. Meetings and questions are retained.
+Stop the old API with Ctrl+C before changing its schema. The latest migration renames existing tables in place and preserves their records. Historical restructuring changes are documented separately.
 
 ```bash
 mkdir -p backups
@@ -41,15 +38,15 @@ pg_dump -h localhost -d SmartMeetDB -Fc -f backups/before-user-restructure.dump
 pg_restore --list backups/before-user-restructure.dump
 ```
 
-Read [docs/MIGRATION.md](docs/MIGRATION.md) for restore verification and the legacy identity policy. Keep backups private; they contain participant details and token hashes. `backups/` is ignored by Git.
+Read [docs/RENAME_MIGRATION.md](docs/RENAME_MIGRATION.md) for safe renaming and restore verification. Keep backups private; they contain participant details and token hashes. `backups/` is ignored by Git.
 
 ## 4. Backend — terminal 1
 
 ```bash
-dotnet restore SmartMeet.slnx
+dotnet restore CAPS_ai.slnx
 dotnet tool restore
-dotnet ef database update --project SmartMeet.API
-dotnet run --project SmartMeet.API
+dotnet ef database update --project CAPS_ai.API
+dotnet run --project CAPS_ai.API
 ```
 
 Keep the terminal running. Open [Swagger](http://localhost:5050/swagger) or [meetings](http://localhost:5050/api/meetings). Running migrations again checks pending changes without resetting records.
@@ -59,7 +56,7 @@ Keep the terminal running. Open [Swagger](http://localhost:5050/swagger) or [mee
 From the repository root:
 
 ```bash
-cd smart-meet-frontend
+cd CAPS_ai-frontend
 npm ci
 npm start
 ```
@@ -90,9 +87,9 @@ Inside the psql prompt:
 ```text
 \conninfo
 \dt
-\d "Users"
-\d "Meetings"
-\d "Questions"
+\d "MeetingAttendees"
+\d "Meeting"
+\d "MeetingQuestions"
 ```
 
 There should be three application tables and `__EFMigrationsHistory`.
@@ -103,20 +100,20 @@ There should be three application tables and `__EFMigrationsHistory`.
 SELECT m."MeetingId", m."Title", m."Description", m."MeetingCode",
        u."UserId" AS "OrganizerId", u."Name" AS "OrganizerName",
        m."StartedAt", m."EndedAt", m."Status"
-FROM "Meetings" m
-LEFT JOIN "Users" u ON u."MeetingId" = m."MeetingId" AND u."Role" = 'Organizer'
+FROM "Meeting" m
+LEFT JOIN "MeetingAttendees" u ON u."MeetingId" = m."MeetingId" AND u."Role" = 'Organizer'
 ORDER BY m."MeetingId";
 ```
 
-`OrganizerId` is derived from the unique Organizer user. It is not a separate Meetings column.
+`OrganizerId` is derived from the unique Organizer user. It is not a separate Meeting column.
 
-### Users
+### Meeting Attendees
 
 ```sql
 SELECT "UserId", "MeetingId", "Name", "Email", "Organization", "Role",
        "JoinedAt", "LastSeenAt", "IsActive",
        ("SessionTokenHash" IS NULL) AS "HistoricalParticipant"
-FROM "Users" ORDER BY "MeetingId", "UserId";
+FROM "MeetingAttendees" ORDER BY "MeetingId", "UserId";
 ```
 
 Raw session tokens are never stored in PostgreSQL. A null hash denotes an unclaimed historical user, not an available login.
@@ -128,7 +125,7 @@ SELECT q."QuestionId", q."MeetingId", q."UserId", u."Name", u."Organization",
        q."QuestionText", q."Category", q."Status", q."SubmittedAt",
        q."SpeakingStartedAt", q."AnsweredAt", q."WithdrawnAt",
        q."SpeakingDurationSeconds", q."OrganizerNote"
-FROM "Questions" q JOIN "Users" u
+FROM "MeetingQuestions" q JOIN "MeetingAttendees" u
   ON u."UserId" = q."UserId" AND u."MeetingId" = q."MeetingId"
 ORDER BY q."SubmittedAt", q."QuestionId";
 ```
@@ -142,8 +139,8 @@ SELECT m."MeetingId", m."Title",
            WHERE m."Status" = 'Active' AND u."IsActive"
              AND u."LastSeenAt" >= now() - interval '60 seconds'
        ) AS "ActiveVisitors"
-FROM "Meetings" m
-LEFT JOIN "Users" u ON u."MeetingId" = m."MeetingId"
+FROM "Meeting" m
+LEFT JOIN "MeetingAttendees" u ON u."MeetingId" = m."MeetingId"
   AND u."Role" = 'Visitor' AND u."SessionTokenHash" IS NOT NULL
 GROUP BY m."MeetingId", m."Title" ORDER BY m."MeetingId";
 ```
@@ -185,7 +182,7 @@ lsof -nP -iTCP:4200 -iTCP:5050 -sTCP:LISTEN
 ## 10. Checks
 
 ```bash
-dotnet build SmartMeet.slnx
+dotnet build CAPS_ai.slnx
 ```
 
 In the frontend folder:
@@ -194,4 +191,46 @@ In the frontend folder:
 npm run build
 ```
 
-Test folders are not required to run the application and have been removed. Historical verification results are recorded in [docs/VERIFICATION.md](docs/VERIFICATION.md).
+Current checks live under `checks/` and `CAPS_ai-frontend/checks/`. See the updated commands below and [docs/VERIFICATION.md](docs/VERIFICATION.md).
+
+## Current joining, summary, and renamed schema
+
+- Run the backend on 5050 and Angular on 4200. Swagger is http://localhost:5050/swagger/index.html (not port 4200).
+- New invitation URLs are `/join/{meetingCode}`. The home-page code field and direct URLs lead to the same registration flow; valid stored visitor sessions are reused.
+- Organizer header controls copy the code/link and display/download a QR PNG.
+- Configure `src/app/app-settings.ts` in the frontend for a reachable LAN/HTTPS invitation base. Use `npm start -- --host 0.0.0.0` for LAN testing; localhost QR links do not reach a Mac from a phone.
+- Ended cards now open the complete `/meeting/:id/summary` page. Its API requires the original organizer session. Summary data remains in PostgreSQL across restarts.
+- Physical tables are now **Meeting**, **MeetingAttendees**, and **MeetingQuestions**. MeetingAttendees is displayed as **Meeting Attendees** in reports. C# class names remain Meeting/User/Question.
+- Preserve `__EFMigrationsHistory`. If it was deleted on an older copy, restore its verified backup matching the actual applied schema before running EF updates; do not blindly reapply the initial migrations.
+
+Before the rename, back up the existing database and read [docs/RENAME_MIGRATION.md](docs/RENAME_MIGRATION.md).
+
+```bash
+mkdir -p backups
+pg_dump -h localhost -d SmartMeetDB -Fc -f backups/before-code-summary-rename.dump
+dotnet ef database update --project CAPS_ai.API
+```
+
+Inspect the current physical tables:
+
+```sql
+SELECT * FROM "Meeting" ORDER BY "MeetingId";
+SELECT "UserId", "Name", "Organization", "Role", "MeetingId" FROM "MeetingAttendees" ORDER BY "UserId";
+SELECT "QuestionId", "MeetingId", "UserId", "QuestionText", "Status", "SpeakingDurationSeconds" FROM "MeetingQuestions" ORDER BY "SubmittedAt", "QuestionId";
+```
+
+Current build/check commands:
+
+```bash
+dotnet build CAPS_ai.slnx
+dotnet test checks/CAPS_ai.Checks.csproj
+```
+
+In the frontend folder:
+
+```bash
+npm run build
+npm run check
+```
+
+Use an isolated migrated database for `python3 checks/core_api.py http://localhost:5051` and `python3 checks/code_summary_api.py http://localhost:5051 CAPS_aiCodeVerify`. The latter intentionally tests constraints and collisions in that test database, and refuses the normal SmartMeetDB name.

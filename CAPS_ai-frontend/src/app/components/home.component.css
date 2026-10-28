@@ -1,0 +1,5 @@
+.home-main{max-width:1050px;padding:30px 24px}.create-card{max-width:600px;margin:22px 0 30px;padding:24px}.create-card h2{font-size:20px;margin-bottom:20px}.recent-meetings{padding-top:24px}.recent-heading h2{font-size:20px}@media(max-width:650px){.home-main{padding:24px 16px}.create-card{padding:20px}}
+
+.home-actions{display:grid;grid-template-columns:1.2fr 1fr;gap:20px;align-items:start}.home-actions .create-card{margin:20px 0}.code-join-card{max-width:none}#join-code{text-transform:lowercase;letter-spacing:1px}@media(max-width:700px){.home-actions{grid-template-columns:1fr}}
+
+.meeting-row[role=link]{cursor:pointer}.meeting-row[role=link]:focus-visible{outline:2px solid #4264f4;outline-offset:3px}

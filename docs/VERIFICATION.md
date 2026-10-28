@@ -1,43 +1,50 @@
-# Verification — 23 October 2026
+# Verification — 26 October 2026
 
-Historical results recorded before the test source folders were removed. These are not commands or tests available in the current assignment copy.
+## Builds and automated checks
 
-## Builds and automated tests
+- ASP.NET Core build passed with zero warnings/errors using the installed .NET 10 SDK.
+- Backend checks: **26 passed** (code format/normalization, 10,000-code uniqueness sample, invalid/legacy codes, summary statistics/timeline, token hashes, restored FIFO/session rules).
+- Frontend checks: **23 passed** (ten unchanged dictation checks, eight search/filter checks, five invitation/configuration/QR checks).
+- Angular production build passed: approximately **429 kB** initial raw bundle, with the QR browser implementation lazy-loaded separately (approximately 25 kB raw).
+- Session/FIFO/ownership HTTP regression: **53 HTTP checks plus assertions passed** against isolated PostgreSQL.
+- Code/summary integration passed: normalized lookup, invalid/ended codes, shared visitor reuse, numeric-link workflow, organizer-only detailed summary, participant/question totals, saved durations/notes/timeline, repeated reads, cross-meeting rejection, case-insensitive uniqueness, and a real forced insert collision with successful transaction rollback/retry.
+- EF Core model snapshot check passed: no pending model changes.
+- Markdown links, SVG syntax, and the rename migration's absence of DropTable/CreateTable operations were checked.
 
-- ASP.NET Core build: passed with zero warnings/errors.
-- Backend unit tests: 22 passed.
-- Angular production build: passed (approximately 401 kB initial raw bundle).
-- Frontend unit tests: 18 passed, including the existing ten dictation lifecycle tests.
-- Session-aware API integration: 53 HTTP checks plus assertions passed against an isolated restored PostgreSQL database.
-- Additional real-database checks passed for token hashing, session reuse, inactivity expiry/heartbeat, composite ownership FK, unique meeting code, single organizer, single speaker, and safe legacy withdrawal.
-- Swagger verified on the working API: current user/join routes and session scheme present; removed feature routes absent.
-- EF Core pending-model check: passed; no model changes since the latest migration.
+## Database preservation
 
-## Database migration
-
-- Created private backups before the change and a final backup with the old API stopped.
-- Verified archive contents and restored the original backup into SmartMeetRestructureVerify.
-- Applied the migration to that copy and compared all original meeting/question fields, including names, timestamps, statuses, and withdrawal hashes.
-- Applied the approved migration to SmartMeetDB, then compared its two original meetings and two original questions against a private pre-migration snapshot: unchanged.
-- Working database has Users, Meetings, Questions, and __EFMigrationsHistory only.
-- Confirmed the full migration chain also succeeds against a fresh SmartMeetFreshVerify database.
-- The removed data consisted of zero votes and one announcement in the original working database. Those discarded records remain recoverable in the private backup.
+- Actual starting tables and columns were inspected; there were 7 meetings, 11 attendees, and 6 questions.
+- A fresh full backup and private exact-record snapshot were saved under ignored `backups/`.
+- The previously deleted EF history table was restored from its verified history-only backup, matching the three existing migrations.
+- The current backup was restored into SmartMeetCodeVerify, and the rename migration was applied there first.
+- Exact comparisons confirmed all original 7 meetings, 11 attendees, and 6 questions were preserved, including IDs, existing codes, session/withdrawal hashes, notes, timestamps, and speaking history.
+- The same migration was then applied to SmartMeetDB. Every working row matched the pre-migration snapshot exactly afterward.
+- Working tables: Meeting, MeetingAttendees, MeetingQuestions, __EFMigrationsHistory. All three foreign keys remain validated; the composite ownership relationship is intact.
+- Complete migration chain was applied to a separate empty SmartMeetCodeFresh database; the three expected tables and all four history rows were verified.
+- Test fixtures were created only in the isolated copy, not in SmartMeetDB.
 
 ## Browser verification
 
-Used a separate frontend preview connected only to the verification database, keeping test fixtures out of SmartMeetDB. Verified:
+A temporary frontend on 4201 proxied only to the isolated API/database on 5051.
 
-1. Meeting creation with organizer identity and description.
-2. Visitor join with server-issued session.
-3. Refresh retains the same visitor and keeps the joined visitor count at one.
-4. Question submission with the microphone control retained and category available.
-5. Note editing and display.
-6. FIFO speaker selection and answer completion with saved speaking duration.
-7. Participant modal showing organizer/visitor activity.
-8. Original three-column organizer layout and existing colors.
-9. Current working home page and read-only historical meeting access.
-10. SSMS-style SVG diagram layout and table/column labels.
+Verified meeting creation, actual title/organizer/date/status, readable code, QR modal, PNG download link and filename, direct uppercase-code invitation, registration, valid-session redirect without duplicate attendees, categorized submission, note/answer controls, meeting completion, summary filtering, ended-card navigation, and persisted summary after a real backend restart plus browser reload.
 
-Browser microphone recording itself was not exercised; its unchanged controller is covered by automated tests. The speech service still depends on browser support and permissions.
+The generated QR PNG was decoded using macOS Core Image. It contained exactly the public `/join/{code}` URL and no token.
 
-The temporary verification servers are stopped after testing. The working frontend/API retain ports 4200/5050. Test databases remain separate for inspection. Backups and private snapshots are ignored by Git.
+The 1280-pixel desktop layout showed three aligned panels, no page-width overflow, a roughly 102-pixel meeting header, and `overflow-y: auto` on the question queue. A real 390-pixel iframe preview showed responsive wrapping without overlapping controls. The renamed SSMS-style diagram was also visually inspected.
+
+No physical phone scan or live microphone recording was performed. The actual PNG decoding, browser QR generation/download, and existing dictation lifecycle checks passed. Phone access still requires a reachable configured public base URL; voice-service availability depends on browser permissions/support and a suitable secure context.
+
+Temporary verification servers are stopped after the checks. Application ports 4200/5050 remain free so the owner can run the app. Test databases are retained separately for inspection. Backups/private snapshots are excluded from Git.
+
+## Project rename verification — 27 October 2026
+
+- Renamed the local source root to CAPS_ai; API project/assembly/namespaces to CAPS_ai.API; DbContext to CAPS_aiDbContext; solution to CAPS_ai.slnx; frontend folder to CAPS_ai-frontend; checks project to CAPS_ai.Checks. npm/Angular use caps-ai-compatible names.
+- Updated documentation paths, launch profile, project references, snapshot metadata, and QR download filename prefix. External report filenames were renamed to CAPS_ai prefixes; their existing historical PDF/image contents were not regenerated.
+- Clean backend and frontend builds passed. Backend checks: 26 passed. Frontend checks: 23 passed.
+- HTTP session/FIFO/ownership regression: 53 checks plus assertions passed; code/summary/collision integration passed against CAPS_aiProjectVerify, a copy of the working database.
+- Original-record comparisons passed for 9 meetings, 15 attendees, and 9 questions. The working database was not migrated or changed; its deliberately removed EF history table remains absent.
+- EF Core reports no pending model changes after namespace/context/snapshot renaming.
+- Normal renamed launch profile, Swagger (CAPS_ai.API), Angular dev-server startup, frontend API proxy, and deep-link serving were verified.
+- Persisted database/connection keys, browser-session/legacy withdrawal keys, and the local user-secrets ID remain compatible. Source and database verification backups are private under ignored backups/.
+- Temporary test servers are stopped afterward; normal application ports remain free.

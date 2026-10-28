@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1340" height="820" viewBox="0 0 1340 820">
 <rect width="1340" height="820" fill="#f6f8fc"/>
 <style>text{font-family:Arial,sans-serif;fill:#182442}.title{font-size:25px;font-weight:bold}.small{font-size:12px}.column{font-size:12px}.table{font-size:17px;font-weight:bold;fill:white}.edge{fill:none;stroke:#576b90;stroke-width:2}</style>
-<text x="30" y="40" class="title">SSMS-Style Database Diagram</text>
+<text x="30" y="40" class="title">SSMS-Style PostgreSQL Database Diagram</text>
 <text x="30" y="69" class="small">Smart Meet · PostgreSQL · PK primary key · FK foreign key · AK alternate key · UK unique index · ? nullable</text>
 <rect x="30" y="110" width="310" height="300" rx="5" fill="white" stroke="#aab6cc"/>
 <path d="M35 110 H335 Q340 110 340 115 V150 H30 V115 Q30 110 35 110" fill="#172345"/>
-<text x="44" y="136" class="table">Meetings</text>
+<text x="44" y="136" class="table">Meeting</text>
 <line x1="30" y1="150" x2="340" y2="150" stroke="#edf0f6"/>
 <text x="39" y="171" class="column">PK</text>
 <text x="85" y="171" class="column">MeetingId</text>
@@ -40,7 +40,7 @@
 <text x="218" y="395" class="column">varchar(20)</text>
 <rect x="420" y="110" width="380" height="364" rx="5" fill="white" stroke="#aab6cc"/>
 <path d="M425 110 H795 Q800 110 800 115 V150 H420 V115 Q420 110 425 110" fill="#172345"/>
-<text x="434" y="136" class="table">Users</text>
+<text x="434" y="136" class="table">Meeting Attendees</text>
 <line x1="420" y1="150" x2="800" y2="150" stroke="#edf0f6"/>
 <text x="429" y="171" class="column">PK,AK</text>
 <text x="475" y="171" class="column">UserId</text>
@@ -83,7 +83,7 @@
 <text x="678" y="459" class="column">varchar(64) ?</text>
 <rect x="900" y="110" width="400" height="460" rx="5" fill="white" stroke="#aab6cc"/>
 <path d="M905 110 H1295 Q1300 110 1300 115 V150 H900 V115 Q900 110 905 110" fill="#172345"/>
-<text x="914" y="136" class="table">Questions</text>
+<text x="914" y="136" class="table">MeetingQuestions</text>
 <line x1="900" y1="150" x2="1300" y2="150" stroke="#edf0f6"/>
 <text x="909" y="171" class="column">PK</text>
 <text x="955" y="171" class="column">QuestionId</text>
@@ -142,8 +142,8 @@
 <text x="810" y="158" class="small">1</text><text x="876" y="222" class="small">N</text>
 <path class="edge" d="M30 167 H14 V660 H1320 V199 H1300"/>
 <text x="30" y="650" class="small">1 meeting → N questions</text>
-<text x="520" y="650" class="small">User ownership uses composite (UserId, MeetingId) FK</text>
-<text x="30" y="710" class="small">Organizer = the meeting’s single Users row where Role = Organizer (partial unique index).</text>
-<text x="30" y="738" class="small">One Speaking question per meeting. FIFO order: SubmittedAt, QuestionId. Restrictive foreign-key deletion.</text>
+<text x="520" y="650" class="small">Attendee ownership uses composite (UserId, MeetingId) FK</text>
+<text x="30" y="710" class="small">Organizer = the meeting’s single MeetingAttendees row where Role = Organizer (partial unique index).</text>
+<text x="30" y="738" class="small">Unique lower-case meeting code index. One Speaking question per meeting. FIFO: SubmittedAt, QuestionId. Restrictive foreign-key deletion.</text>
 <text x="30" y="766" class="small">SessionTokenHash is internal. WithdrawalTokenHash supports legacy questions. Migration history table omitted.</text>
 </svg>

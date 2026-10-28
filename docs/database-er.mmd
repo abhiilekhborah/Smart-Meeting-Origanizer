@@ -1,8 +1,8 @@
 erDiagram
-    Meetings ||--o{ Users : "has participants (one Organizer)"
-    Meetings ||--o{ Questions : contains
-    Users ||--o{ Questions : submits
-    Meetings {
+    Meeting ||--o{ MeetingAttendees : "has participants (one Organizer)"
+    Meeting ||--o{ MeetingQuestions : contains
+    MeetingAttendees ||--o{ MeetingQuestions : submits
+    Meeting {
         integer MeetingId PK
         varchar200 Title
         text Description "nullable"
@@ -12,7 +12,7 @@ erDiagram
         timestamptz EndedAt "nullable"
         varchar20 Status
     }
-    Users {
+    MeetingAttendees {
         integer UserId PK
         integer MeetingId FK "part of alternate key with UserId"
         varchar100 Name
@@ -24,7 +24,7 @@ erDiagram
         boolean IsActive
         varchar64 SessionTokenHash UK "nullable; internal"
     }
-    Questions {
+    MeetingQuestions {
         integer QuestionId PK
         integer MeetingId FK "also part of composite user FK"
         integer UserId FK "composite FK: UserId + MeetingId"

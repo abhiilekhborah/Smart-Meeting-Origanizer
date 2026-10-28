@@ -1,13 +1,15 @@
-# Database diagrams
+# Smart Meet database diagrams
+
+The implemented PostgreSQL tables are **Meeting**, **MeetingAttendees**, and **MeetingQuestions**. The report/display name of MeetingAttendees is **Meeting Attendees**. C# entity names remain Meeting, User, and Question.
 
 ## Standard ER diagram
 
 ```mermaid
 erDiagram
-    Meetings ||--o{ Users : "has participants (one Organizer)"
-    Meetings ||--o{ Questions : contains
-    Users ||--o{ Questions : submits
-    Meetings {
+    Meeting ||--o{ MeetingAttendees : "has participants (one Organizer)"
+    Meeting ||--o{ MeetingQuestions : contains
+    MeetingAttendees ||--o{ MeetingQuestions : submits
+    Meeting {
         integer MeetingId PK
         varchar200 Title
         text Description "nullable"
@@ -17,7 +19,7 @@ erDiagram
         timestamptz EndedAt "nullable"
         varchar20 Status
     }
-    Users {
+    MeetingAttendees {
         integer UserId PK
         integer MeetingId FK "part of alternate key with UserId"
         varchar100 Name
@@ -29,7 +31,7 @@ erDiagram
         boolean IsActive
         varchar64 SessionTokenHash UK "nullable; internal"
     }
-    Questions {
+    MeetingQuestions {
         integer QuestionId PK
         integer MeetingId FK "also part of composite user FK"
         integer UserId FK "composite FK: UserId + MeetingId"
@@ -46,24 +48,27 @@ erDiagram
     }
 ```
 
-![Standard ER Diagram](database-er.svg)
+![Standard ER diagram](database-er.svg)
 
-## SSMS-Style Database Diagram
+## SSMS-Style PostgreSQL Database Diagram
 
-This is a PostgreSQL schema drawn in an SSMS-style table-box layout, not an actual SSMS export.
+This table-box drawing represents PostgreSQL. It is not an authentic Microsoft SSMS export.
 
-![SSMS-Style Database Diagram](ssms-style-database.svg)
+![SSMS-Style PostgreSQL Database Diagram](ssms-style-database.svg)
 
-## Relationship and legacy decisions
+## Constraints and relationships
 
-- `Users.MeetingId` references `Meetings.MeetingId` with restricted deletion.
-- `Questions.MeetingId` references `Meetings.MeetingId` with restricted deletion.
-- `(Questions.UserId, Questions.MeetingId)` references the alternate key `(Users.UserId, Users.MeetingId)`. This prevents cross-meeting ownership at database level.
-- The organizer is the single user with `Role = 'Organizer'` in that meeting. A partial unique index enforces at most one. Meeting creation transactionally inserts both records. `OrganizerId` is returned in API responses, not duplicated as a stored column; this avoids a circular foreign key.
-- Historical meetings have no invented organizer. Every historical question has its own unclaimed Visitor record; identical names are not merged.
-- `SessionTokenHash` is null only for unclaimed historical users. Their question-specific withdrawal hashes are retained. New questions use session ownership and leave `WithdrawalTokenHash` null.
-- Registered/active visitor counts are derived from session-backed Visitor rows. Historical unclaimed rows appear separately in participant listings and do not inflate joined visitor counts.
-- `TotalParticipants` is calculated, not stored. `IsActive` is effective only when the meeting is active and `LastSeenAt` is within 60 seconds; a stale stored flag alone does not count as active.
-- Question states: Pending, Speaking, Answered, Withdrawn. Categories: General, Technical, Feedback, Other; API defaults to General.
-- `IX_OneSpeakerPerMeeting` permits at most one Speaking question per meeting.
-- `__EFMigrationsHistory` is the only additional system table and is omitted here.
+- MeetingAttendees.MeetingId → Meeting.MeetingId.
+- MeetingQuestions.MeetingId → Meeting.MeetingId.
+- (MeetingQuestions.UserId, MeetingQuestions.MeetingId) → the alternate unique key (MeetingAttendees.UserId, MeetingAttendees.MeetingId). This rejects cross-meeting ownership.
+- All foreign keys use restricted deletion.
+- At most one Organizer attendee per meeting; organizer ID is derived, not duplicated in Meeting.
+- At most one Speaking question per meeting (partial unique index).
+- MeetingCode has its existing unique index plus a unique expression index on lower(MeetingCode), preserving old codes while enforcing case-insensitive uniqueness. New codes use abc-defg-hij format and secure random letters.
+- Non-null session-token hashes are unique; raw session tokens are never stored.
+- Category is General, Technical, Feedback, Other, or NULL for compatibility; API defaults to General.
+- WithdrawalTokenHash is retained only for legacy question withdrawal.
+- Registered visitor counts are derived from session-backed Visitor attendees. Historical unclaimed attendees are not counted as registered visitors.
+- __EFMigrationsHistory remains present as an EF system table and is omitted from the application diagrams.
+
+The rename migration changes table/index/constraint names in place and adds the case-insensitive index. It does not recreate these tables or change their rows, codes, timestamps, or ownership.
