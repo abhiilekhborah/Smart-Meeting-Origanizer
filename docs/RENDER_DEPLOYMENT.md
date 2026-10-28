@@ -1,5 +1,15 @@
 # Render deployment and uptime monitoring
 
+## Live deployment
+
+- App: https://caps-ai-meetings-organizer.onrender.com/
+- Uptime endpoint: https://caps-ai-meetings-organizer.onrender.com/health
+- Database readiness: https://caps-ai-meetings-organizer.onrender.com/health/ready
+- Render service: `caps-ai-meetings-organizer`, free Docker, Singapore; main branch auto-deploys.
+- Render database: `caps-ai-db`, PostgreSQL 16, private internal connection, external access blocked.
+- The free database created on 28 October 2026 expires on **27 November 2026**. Back it up or choose a paid database before expiry.
+- UptimeRobot HTTP(S) monitor checks the uptime endpoint every five minutes.
+
 ## Deployment layout
 
 The Docker image builds Angular with Node 24, publishes the ASP.NET Core 10 API, and serves both from one HTTPS origin. PostgreSQL is a separate managed database. New invitation URLs/QR codes use the deployed browser origin automatically when app-settings.ts has an empty publicApplicationBaseUrl.
@@ -36,7 +46,7 @@ Local app startup remains `dotnet run --project CAPS_ai.API` and `npm start` in 
 
 ## UptimeRobot
 
-After deployment, add an HTTP(S) monitor for `https://YOUR-RENDER-SERVICE.onrender.com/health` with a five-minute interval. No API token or organizer session belongs in the monitoring URL.
+The configured HTTP(S) monitor targets `https://caps-ai-meetings-organizer.onrender.com/health` with a five-minute interval. No API token or organizer session belongs in the monitoring URL.
 
 UptimeRobot's free monitoring interval is currently five minutes. Render free web services currently sleep after 15 minutes without inbound traffic. Incoming monitoring requests can keep a service active but do not guarantee uptime, prevent maintenance restarts, or bypass plan quotas. Do not use /robots.txt as the wake-up target.
 
