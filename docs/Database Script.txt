@@ -1,0 +1,438 @@
+CAPS.ai MEETINGS ORGANIZER - DATABASE SCRIPT AND REFERENCE
+Updated: 29 October 2026
+Database engine: PostgreSQL 16
+
+1. PURPOSE AND DATABASE NAMES
+=============================
+This file explains the complete current application schema and provides SQL
+for understanding the tables and viewing their data. It contains no passwords,
+connection secrets, participant records, or destructive/reset commands.
+
+Local database: SmartMeetDB
+Render database: caps_ai_db (managed resource name: caps-ai-db)
+Schema: public
+Application tables: Meeting, MeetingAttendees, MeetingQuestions
+EF infrastructure table on migrated installations: __EFMigrationsHistory
+
+The renamed CAPS_ai project still uses the local connection configuration key
+ConnectionStrings:SmartMeetDB. Physical PostgreSQL names are case-sensitive
+when double-quoted; always preserve the quotes shown in the SQL below.
+
+The cloud and local databases are separate. Connecting to SmartMeetDB on
+localhost does not show records created on the public Render website.
+
+2. SETUP AND CONNECTION
+=======================
+Use migrations for a fresh installation so schema AND migration history agree.
+From the CAPS_ai project root, after creating an empty database and configuring
+the connection as explained in the setup guide:
+
+    dotnet run --project CAPS_ai.API -- --migrate
+
+This command is not needed for everyday startup. The existing Mac database's
+migration history was previously removed; restore verified matching history
+before future migrations. Keep migration history on fresh/cloud installations.
+
+Database creation for a NEW installation only, connected to database postgres:
+
+    CREATE DATABASE "SmartMeetDB";
+
+CREATE DATABASE must run outside a transaction. Then reconnect to SmartMeetDB.
+If the database already exists, skip creation; do not drop or reset it.
+
+macOS terminal, using the default local role:
+    psql -h localhost -p 5432 -d SmartMeetDB
+
+Windows terminal, using the postgres role:
+    psql -h localhost -p 5432 -U postgres -d SmartMeetDB
+
+Use your configured role if it differs. Enter its password when prompted.
+PostgreSQL must already be running. No Microsoft SQL Server or SSMS is needed.
+Use psql or pgAdmin for these PostgreSQL commands.
+
+3. RELATIONSHIPS
+================
+Meeting.MeetingId (PK)
+    |
+    +---< MeetingAttendees.MeetingId (FK)
+    |
+    +---< MeetingQuestions.MeetingId (FK)
+
+MeetingAttendees.(UserId, MeetingId) (UNIQUE alternate key)
+    |
+    +---< MeetingQuestions.(UserId, MeetingId) (composite FK)
+
+One meeting has many attendees and many questions.
+One attendee can have many questions within their meeting.
+The composite foreign key prevents a question from referring to an attendee
+from a different meeting. Foreign keys use ON DELETE RESTRICT, so referenced
+meetings/attendees cannot be deleted while dependent rows remain.
+
+An organizer is an attendee with Role='Organizer'. There is no separate
+Organizer table or OrganizerId column on Meeting. The unique filtered organizer
+index allows at most one organizer per meeting. A meeting can have no organizer
+row at the database level; normal new-meeting creation supplies one in the app.
+
+4. COLUMN DICTIONARY
+====================
+PK = primary key. FK = foreign key. NULL = optional. All other fields required.
+All date/time columns use PostgreSQL timestamp with time zone (timestamptz).
+Application code supplies UTC timestamps. psql displays them in its session
+time zone; SET TIME ZONE 'UTC'; can make display consistent.
+
+TABLE: Meeting
+--------------
+MeetingId       integer, identity, PK      Generated meeting identifier.
+Title           varchar(200), NOT NULL     Meeting title.
+Description     text, NULL                 Optional meeting description.
+MeetingCode     varchar(20), NOT NULL      Unique public joining code.
+CreatedAt       timestamptz, NOT NULL      When the record was created.
+StartedAt       timestamptz, NOT NULL      Meeting start timestamp.
+Status          varchar(20), NOT NULL      Active or Ended.
+EndedAt         timestamptz, NULL          When the meeting ended.
+
+TABLE: MeetingAttendees
+-----------------------
+UserId          integer, identity, PK      Generated attendee identifier.
+MeetingId       integer, NOT NULL, FK      Meeting this attendee belongs to.
+Name            varchar(100), NOT NULL     Attendee display name.
+Email           varchar(150), NULL         Optional email.
+Organization    varchar(150), NOT NULL     Attendee's organization.
+Role            varchar(20), NOT NULL      Organizer or Visitor.
+JoinedAt        timestamptz, NOT NULL      When attendee joined.
+LastSeenAt      timestamptz, NULL          Latest recorded activity heartbeat.
+IsActive        boolean, NOT NULL          Stored activity flag.
+SessionTokenHash varchar(64), NULL         SHA-256 hash of anonymous session.
+
+UserId identifies a meeting-specific attendee, not a reusable account login.
+The same person can have separate attendee rows in different meetings.
+SessionTokenHash=NULL is used for historical, unclaimed attendee records.
+Raw session tokens are not stored in this table. A hash is not encrypted text
+that can be decrypted to recover the original token.
+
+TABLE: MeetingQuestions
+-----------------------
+QuestionId      integer, identity, PK      Generated question identifier.
+MeetingId       integer, NOT NULL, FK      Meeting receiving the question.
+UserId          integer, NOT NULL          Author; part of composite FK.
+QuestionText    text, NOT NULL             Submitted question text.
+Category        varchar(50), NULL          General/Technical/Feedback/Other.
+Status          varchar(20), NOT NULL      Pending/Speaking/Answered/Withdrawn.
+SubmittedAt     timestamptz, NOT NULL      Submission time; FIFO ordering.
+SpeakingStartedAt timestamptz, NULL        When selected for speaking.
+AnsweredAt      timestamptz, NULL          When marked answered.
+WithdrawnAt     timestamptz, NULL          When withdrawn.
+SpeakingDurationSeconds integer, NULL     Recorded speaking time; nonnegative.
+OrganizerNote   text, NULL                 Organizer's note about the question.
+WithdrawalTokenHash varchar(64), NULL      Legacy withdrawal credential hash.
+
+New question ownership uses the attendee's validated session. The legacy hash
+is retained for older submissions. Name and organization come from the related
+attendee row, not duplicated question columns.
+
+TABLE: __EFMigrationsHistory (infrastructure)
+--------------------------------------------
+MigrationId     varchar(150), NOT NULL, PK  Applied EF migration identifier.
+ProductVersion  varchar(32), NOT NULL       EF Core version applying migration.
+
+This table tracks schema changes; it is not application meeting data. The
+existing local copy may lack it due to the earlier explicit deletion. Cloud
+and fresh migrated installations should retain it.
+
+5. CONSTRAINTS, INDEXES, AND APPLICATION RULES
+=============================================
+Meeting:
+- Primary key on MeetingId; unique index on MeetingCode.
+- CK_Meeting_Status: Status must be Active or Ended.
+
+MeetingAttendees:
+- Primary key on UserId; alternate unique key on (UserId, MeetingId).
+- FK MeetingId -> Meeting.MeetingId, delete restricted.
+- CK_User_Role: Role must be Organizer or Visitor.
+- Unique SessionTokenHash index for non-NULL hashes.
+- IX_OneOrganizerPerMeeting: unique MeetingId where Role='Organizer'.
+- Index on (MeetingId, Role, LastSeenAt) supports participant/activity queries.
+
+MeetingQuestions:
+- Primary key on QuestionId.
+- FK MeetingId -> Meeting.MeetingId, delete restricted.
+- Composite FK (UserId, MeetingId) -> MeetingAttendees.(UserId, MeetingId),
+  delete restricted.
+- CK_Question_Status: four permitted states listed in the dictionary.
+- CK_Question_Category: NULL or one of the four permitted categories.
+- CK_Question_Duration: NULL or SpeakingDurationSeconds >= 0.
+- IX_OneSpeakerPerMeeting: unique MeetingId where Status='Speaking'.
+- Index on (MeetingId, Status, SubmittedAt, QuestionId) supports the queue.
+- Index on (UserId, MeetingId) supports the composite attendee relationship.
+
+ID columns use GENERATED BY DEFAULT AS IDENTITY. Other current-model columns
+do not have SQL DEFAULT clauses; the backend supplies initial field values.
+C# initial values include Active, Visitor, Pending, General, and UTC timestamps.
+
+Rules also enforced by backend services (not all are database CHECK rules):
+- Only visitors submit questions; organizers manage the queue and meeting.
+- New question starts Pending; FIFO uses SubmittedAt then QuestionId.
+- Selection changes a question to Speaking; answering changes it to Answered.
+- A visitor can withdraw their own eligible pending question.
+- Ending a meeting closes joining and submission.
+- The database role constraint alone does not prevent an organizer from being
+  referenced by a manually inserted question; that permission lives in the API.
+- Active visitor counts require an active meeting, IsActive=true, and a
+  heartbeat within 60 seconds. IsActive by itself is not the full count rule.
+- Participant totals and summaries are computed, not separate summary tables.
+
+6. CURRENT CREATE-TABLE SCRIPT
+==============================
+The SQL below is generated from the current EF Core model for reference or
+for a separate empty demonstration database. It is NOT an upgrade script and
+does not insert EF migration history. Do not execute it against an existing
+application database or combine manual creation with initial EF migrations.
+Use the migration command in section 2 for an app-ready fresh installation.
+Names of constraints retained by older rename migrations can differ while
+representing the same schema rules.
+
+--- BEGIN CURRENT MODEL SQL ---
+CREATE TABLE "Meeting" (
+    "MeetingId" integer GENERATED BY DEFAULT AS IDENTITY,
+    "Title" character varying(200) NOT NULL,
+    "Description" text,
+    "MeetingCode" character varying(20) NOT NULL,
+    "CreatedAt" timestamp with time zone NOT NULL,
+    "StartedAt" timestamp with time zone NOT NULL,
+    "Status" character varying(20) NOT NULL,
+    "EndedAt" timestamp with time zone,
+    CONSTRAINT "PK_Meeting" PRIMARY KEY ("MeetingId"),
+    CONSTRAINT "CK_Meeting_Status" CHECK ("Status" IN ('Active', 'Ended'))
+);
+
+
+CREATE TABLE "MeetingAttendees" (
+    "UserId" integer GENERATED BY DEFAULT AS IDENTITY,
+    "MeetingId" integer NOT NULL,
+    "Name" character varying(100) NOT NULL,
+    "Email" character varying(150),
+    "Organization" character varying(150) NOT NULL,
+    "Role" character varying(20) NOT NULL,
+    "JoinedAt" timestamp with time zone NOT NULL,
+    "LastSeenAt" timestamp with time zone,
+    "IsActive" boolean NOT NULL,
+    "SessionTokenHash" character varying(64),
+    CONSTRAINT "PK_MeetingAttendees" PRIMARY KEY ("UserId"),
+    CONSTRAINT "AK_MeetingAttendees_UserId_MeetingId" UNIQUE ("UserId", "MeetingId"),
+    CONSTRAINT "CK_User_Role" CHECK ("Role" IN ('Organizer', 'Visitor')),
+    CONSTRAINT "FK_MeetingAttendees_Meeting_MeetingId" FOREIGN KEY ("MeetingId") REFERENCES "Meeting" ("MeetingId") ON DELETE RESTRICT
+);
+
+
+CREATE TABLE "MeetingQuestions" (
+    "QuestionId" integer GENERATED BY DEFAULT AS IDENTITY,
+    "MeetingId" integer NOT NULL,
+    "UserId" integer NOT NULL,
+    "QuestionText" text NOT NULL,
+    "Category" character varying(50),
+    "Status" character varying(20) NOT NULL,
+    "SubmittedAt" timestamp with time zone NOT NULL,
+    "SpeakingStartedAt" timestamp with time zone,
+    "AnsweredAt" timestamp with time zone,
+    "WithdrawnAt" timestamp with time zone,
+    "SpeakingDurationSeconds" integer,
+    "OrganizerNote" text,
+    "WithdrawalTokenHash" character varying(64),
+    CONSTRAINT "PK_MeetingQuestions" PRIMARY KEY ("QuestionId"),
+    CONSTRAINT "CK_Question_Category" CHECK ("Category" IS NULL OR "Category" IN ('General', 'Technical', 'Feedback', 'Other')),
+    CONSTRAINT "CK_Question_Duration" CHECK ("SpeakingDurationSeconds" IS NULL OR "SpeakingDurationSeconds" >= 0),
+    CONSTRAINT "CK_Question_Status" CHECK ("Status" IN ('Pending', 'Speaking', 'Answered', 'Withdrawn')),
+    CONSTRAINT "FK_MeetingQuestions_MeetingAttendees_UserId_MeetingId" FOREIGN KEY ("UserId", "MeetingId") REFERENCES "MeetingAttendees" ("UserId", "MeetingId") ON DELETE RESTRICT,
+    CONSTRAINT "FK_MeetingQuestions_Meeting_MeetingId" FOREIGN KEY ("MeetingId") REFERENCES "Meeting" ("MeetingId") ON DELETE RESTRICT
+);
+
+
+CREATE UNIQUE INDEX "IX_Meeting_MeetingCode" ON "Meeting" ("MeetingCode");
+
+
+CREATE INDEX "IX_MeetingAttendees_MeetingId_Role_LastSeenAt" ON "MeetingAttendees" ("MeetingId", "Role", "LastSeenAt");
+
+
+CREATE UNIQUE INDEX "IX_MeetingAttendees_SessionTokenHash" ON "MeetingAttendees" ("SessionTokenHash") WHERE "SessionTokenHash" IS NOT NULL;
+
+
+CREATE UNIQUE INDEX "IX_OneOrganizerPerMeeting" ON "MeetingAttendees" ("MeetingId") WHERE "Role" = 'Organizer';
+
+
+CREATE INDEX "IX_MeetingQuestions_MeetingId_Status_SubmittedAt_QuestionId" ON "MeetingQuestions" ("MeetingId", "Status", "SubmittedAt", "QuestionId");
+
+
+CREATE INDEX "IX_MeetingQuestions_UserId_MeetingId" ON "MeetingQuestions" ("UserId", "MeetingId");
+
+
+CREATE UNIQUE INDEX "IX_OneSpeakerPerMeeting" ON "MeetingQuestions" ("MeetingId") WHERE "Status" = 'Speaking';
+
+
+
+--- END CURRENT MODEL SQL ---
+
+7. INSPECTION QUERIES - SAFE TO RUN ON AN EXISTING DATABASE
+=========================================================
+Run SQL in psql or pgAdmin Query Tool. Run backslash commands only in psql.
+
+A. Confirm which database and role you are using:
+
+SELECT current_database(), current_user, current_schema();
+
+B. List tables:
+
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+ORDER BY table_name;
+
+C. Show all application columns, types, lengths, nullability, and identity:
+
+SELECT table_name, ordinal_position, column_name, data_type,
+       character_maximum_length, is_nullable, is_identity, column_default
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name IN ('Meeting', 'MeetingAttendees', 'MeetingQuestions')
+ORDER BY table_name, ordinal_position;
+
+D. Show actual constraint definitions on this database:
+
+SELECT c.conrelid::regclass AS table_name, c.conname AS constraint_name,
+       pg_get_constraintdef(c.oid) AS definition
+FROM pg_constraint c
+JOIN pg_class t ON t.oid = c.conrelid
+JOIN pg_namespace n ON n.oid = t.relnamespace
+WHERE n.nspname = 'public'
+  AND t.relname IN ('Meeting', 'MeetingAttendees', 'MeetingQuestions')
+ORDER BY t.relname, c.conname;
+
+E. Show index definitions:
+
+SELECT tablename, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+  AND tablename IN ('Meeting', 'MeetingAttendees', 'MeetingQuestions')
+ORDER BY tablename, indexname;
+
+F. View meetings and their organizer:
+
+SELECT m."MeetingId", m."Title", m."Description", m."MeetingCode",
+       m."Status", m."CreatedAt", m."StartedAt", m."EndedAt",
+       a."UserId" AS "OrganizerId", a."Name" AS "OrganizerName"
+FROM "Meeting" m
+LEFT JOIN "MeetingAttendees" a
+  ON a."MeetingId" = m."MeetingId" AND a."Role" = 'Organizer'
+ORDER BY m."MeetingId";
+
+G. View attendees without exposing their session hashes:
+
+SELECT "UserId", "MeetingId", "Name", "Email", "Organization", "Role",
+       "JoinedAt", "LastSeenAt", "IsActive",
+       ("SessionTokenHash" IS NULL) AS "HistoricalUnclaimedParticipant"
+FROM "MeetingAttendees"
+ORDER BY "MeetingId", "UserId";
+
+H. View questions with meeting and attendee details:
+
+SELECT q."QuestionId", m."Title" AS "MeetingTitle", q."MeetingId",
+       q."UserId", a."Name", a."Organization", q."QuestionText",
+       q."Category", q."Status", q."SubmittedAt", q."SpeakingStartedAt",
+       q."AnsweredAt", q."WithdrawnAt", q."SpeakingDurationSeconds",
+       q."OrganizerNote"
+FROM "MeetingQuestions" q
+JOIN "Meeting" m ON m."MeetingId" = q."MeetingId"
+JOIN "MeetingAttendees" a
+  ON a."UserId" = q."UserId" AND a."MeetingId" = q."MeetingId"
+ORDER BY q."SubmittedAt", q."QuestionId";
+
+I. Pending FIFO queue for meeting 1 (replace 1 with an existing MeetingId):
+
+SELECT "QuestionId", "UserId", "QuestionText", "SubmittedAt"
+FROM "MeetingQuestions"
+WHERE "MeetingId" = 1 AND "Status" = 'Pending'
+ORDER BY "SubmittedAt", "QuestionId";
+
+J. Currently speaking questions:
+
+SELECT "MeetingId", "QuestionId", "QuestionText", "SpeakingStartedAt"
+FROM "MeetingQuestions"
+WHERE "Status" = 'Speaking'
+ORDER BY "MeetingId";
+
+K. Registered visitor totals and currently active visitors:
+
+SELECT m."MeetingId", m."Title",
+       COUNT(a."UserId") AS "TotalRegisteredVisitors",
+       COUNT(a."UserId") FILTER (
+           WHERE m."Status" = 'Active' AND a."IsActive"
+             AND a."LastSeenAt" >= now() - interval '60 seconds'
+       ) AS "ActiveVisitors"
+FROM "Meeting" m
+LEFT JOIN "MeetingAttendees" a ON a."MeetingId" = m."MeetingId"
+  AND a."Role" = 'Visitor' AND a."SessionTokenHash" IS NOT NULL
+GROUP BY m."MeetingId", m."Title"
+ORDER BY m."MeetingId";
+
+L. Question counts per meeting, including meetings with no questions:
+
+SELECT m."MeetingId", m."Title", COUNT(q."QuestionId") AS "TotalQuestions",
+       COUNT(q."QuestionId") FILTER (WHERE q."Status" = 'Pending') AS "Pending",
+       COUNT(q."QuestionId") FILTER (WHERE q."Status" = 'Speaking') AS "Speaking",
+       COUNT(q."QuestionId") FILTER (WHERE q."Status" = 'Answered') AS "Answered",
+       COUNT(q."QuestionId") FILTER (WHERE q."Status" = 'Withdrawn') AS "Withdrawn"
+FROM "Meeting" m
+LEFT JOIN "MeetingQuestions" q ON q."MeetingId" = m."MeetingId"
+GROUP BY m."MeetingId", m."Title"
+ORDER BY m."MeetingId";
+
+M. Migration history, only if its table exists:
+
+SELECT to_regclass('public."__EFMigrationsHistory"') AS history_table;
+
+If the result is not NULL, you can run:
+SELECT "MigrationId", "ProductVersion"
+FROM "__EFMigrationsHistory" ORDER BY "MigrationId";
+
+N. Useful psql commands (not SQL for pgAdmin):
+
+\conninfo
+\dt
+\d "Meeting"
+\d "MeetingAttendees"
+\d "MeetingQuestions"
+\x
+\pset pager off
+\q
+
+8. WHERE THE DATABASE CODE LIVES
+================================
+All paths below are relative to the CAPS_ai project root.
+
+CAPS_ai.API/Models/Meeting.cs       Meeting C# properties and initial values.
+CAPS_ai.API/Models/User.cs          Attendee C# properties; mapped to MeetingAttendees.
+CAPS_ai.API/Models/Question.cs      Question C# properties.
+CAPS_ai.API/Data/CAPS_aiDbContext.cs
+    Table mapping, keys, column lengths, checks, relationships, and indexes.
+CAPS_ai.API/Migrations/
+    Versioned schema changes and the EF model snapshot.
+CAPS_ai.API/Services/DatabaseConfiguration.cs
+    Resolves DATABASE_URL or ConnectionStrings:SmartMeetDB for Npgsql.
+CAPS_ai.API/Services/DeploymentMigration.cs
+    Guarded migration startup; rejects an existing schema with missing history.
+CAPS_ai.API/Services/TokenSecrets.cs
+    Generates random tokens and hashes them with SHA-256.
+CAPS_ai.API/Program.cs
+    Registers the DbContext with UseNpgsql and handles --migrate startup.
+
+C# DbSet names Meetings/Users/Questions are not the physical table names.
+Database identities, permission checks, and queue operations should normally
+be created through the API so application rules are applied consistently.
+
+To regenerate a current-model schema without changing database records:
+    dotnet ef dbcontext script --project CAPS_ai.API --output schema.sql
+Run dotnet tool restore first if the local EF command is unavailable.
+
+This file's CREATE statements were generated with that EF command, rather
+than copied from an old SQL Server or pre-rename schema. It describes the
+current repository model; the inspection queries reveal the actual schema
+and any differences on a particular installation.
